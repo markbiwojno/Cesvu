@@ -20,12 +20,6 @@ importers:
       fflate:
         specifier: ^0.8.2
         version: 0.8.3
-      hash-wasm:
-        specifier: ^4.12.0
-        version: 4.12.0
-      libsodium-wrappers-sumo:
-        specifier: 0.7.13
-        version: 0.7.13
       lucide-svelte:
         specifier: ^0.511.0
         version: 0.511.0(svelte@5.56.2(@typescript-eslint/types@8.61.1))
@@ -2523,6 +2517,7 @@ packages:
   eslint@9.39.4:
     resolution: {integrity: sha512-XoMjdBOwe/esVgEvLmNsD3IRHkm7fbKIUGvrleloJXUZgDHig2IPWNniv+GwjyJXzuNqVjlr5+4yVUZjycJwfQ==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+    deprecated: This version is no longer supported. Please see https://eslint.org/version-support for other options.
     hasBin: true
     peerDependencies:
       jiti: '*'
@@ -2761,9 +2756,6 @@ packages:
   has-tostringtag@1.0.2:
     resolution: {integrity: sha512-NqADB8VjPFLM2V0VvHUewwwsw0ZWBaIdgo+ieHtK3hasLz4qeCRjYcqfB6AQrBggRKppKF8L52/VqdVsO47Dlw==}
     engines: {node: '>= 0.4'}
-
-  hash-wasm@4.12.0:
-    resolution: {integrity: sha512-+/2B2rYLb48I/evdOIhP+K/DD2ca2fgBjp6O+GBEnCDk2e4rpeXIK8GvIyRPjTezgmWn9gmKwkQjjx6BtqDHVQ==}
 
   hasown@2.0.4:
     resolution: {integrity: sha512-T2UbfbBEF32wiepXIsMlTW9+dDYC6wMh/t/vYA4tuOMKqWz/n3vr1NFSxQiyP+zk2mXsoMA/i/7qV6LKut1t1A==}
@@ -3069,12 +3061,6 @@ packages:
   levn@0.4.1:
     resolution: {integrity: sha512-+bT2uH4E5LGE7h/n3evcS/sQlJXCpIp6ym8OWJ5eV6+67Dsql/LaaT7qJBAt2rzfoa/5QBGBhxDix1dMt2kQKQ==}
     engines: {node: '>= 0.8.0'}
-
-  libsodium-sumo@0.7.16:
-    resolution: {integrity: sha512-x6atrz2AdXCJg6G709x9W9TTJRI6/0NcL5dD0l5GGVqNE48UJmDsjO4RUWYTeyXXUpg+NXZ2SHECaZnFRYzwGA==}
-
-  libsodium-wrappers-sumo@0.7.13:
-    resolution: {integrity: sha512-lz4YdplzDRh6AhnLGF2Dj2IUj94xRN6Bh8T0HLNwzYGwPehQJX6c7iYVrFUPZ3QqxE0bqC+K0IIqqZJYWumwSQ==}
 
   license-checker-rseidelsohn@5.0.1:
     resolution: {integrity: sha512-9X+ikKxt9Hy3zOrOZzW1dXL4St5akoYjLt63Am9JZVzU6aTdN+xfDvqySpnJT+gF/h5RmtMk2waW6TDNNCKbqQ==}
@@ -7134,8 +7120,6 @@ snapshots:
     dependencies:
       has-symbols: 1.1.0
 
-  hash-wasm@4.12.0: {}
-
   hasown@2.0.4:
     dependencies:
       function-bind: 1.1.2
@@ -7411,12 +7395,6 @@ snapshots:
     dependencies:
       prelude-ls: 1.2.1
       type-check: 0.4.0
-
-  libsodium-sumo@0.7.16: {}
-
-  libsodium-wrappers-sumo@0.7.13:
-    dependencies:
-      libsodium-sumo: 0.7.16
 
   license-checker-rseidelsohn@5.0.1:
     dependencies:

@@ -209,7 +209,7 @@ export async function buildCesvuFile(
 export interface ParsedCesvuFile {
 	metadata: CesvuMetadata;
 	/** The CFP1-framed payload — pass to the same parser that previously
-	 *  consumed `decryptCesvu`'s `plaintext`. */
+	 *  consumed from the removed `decryptCesvu`'s `plaintext`. */
 	payload: Uint8Array;
 }
 

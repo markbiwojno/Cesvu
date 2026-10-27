@@ -5,9 +5,8 @@
  * Browsers hand back a synthetic zero-byte `File` object (empty `type`,
  * `size: 0`, name = folder name) for a DRAGGED FOLDER, indistinguishable
  * from a real empty file by looking at `DataTransfer.files` alone. Left
- * unchecked, a dropped folder with an unrecognized "extension" (e.g.
- * `.svelte-kit`) sails right through `isVaultCandidate()` and gets
- * "encrypted" into a blank, useless `.cesvu` file.
+ * unchecked, a dropped folder would sail through as a bogus zero-byte
+ * "file" and confuse the upload/parse pipeline.
  *
  * The fix is to check `DataTransferItem.webkitGetAsEntry()` (despite the
  * name, standardized and supported across Chromium/Firefox/Safari) at

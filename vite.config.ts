@@ -9,16 +9,6 @@ import { dirname } from 'node:path';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// NOTE: libsodium-wrappers-sumo is pinned to 0.7.13 in package.json (see
-// cesvu-crypto.ts header comment). 0.7.13 ships ONLY a CJS build (no
-// "exports" map, no "module"/.mjs build) — Vite's default CJS→ESM interop
-// (via esbuild pre-bundling in dev, and its commonjs plugin in build)
-// handles this transparently, so no alias is needed. 0.7.14+ introduced a
-// broken dual ESM/CJS package.json "exports" map that resolves the `import`
-// condition to a `.mjs` file which itself imports a non-existent submodule —
-// DO NOT bump this package past 0.7.13 without re-verifying the ESM build
-// actually works in the browser.
-
 
 /**
  * Inline Vite plugin: add COOP + COEP headers via server middleware.
@@ -163,20 +153,7 @@ export default defineConfig({
 				// Exclude the dead ONNX WASM fallback from precache entirely.
 				// wasmPaths is always set before model load so this file is
 				// never fetched at runtime — no point caching 22MB of dead weight.
-				globIgnores: [
-					'**/ort-wasm-simd-threaded.asyncify.*.wasm',
-					// The streaming-download service worker must never be
-					// precached. `globPatterns` above matches all **/*.js, which
-					// otherwise pulls this second worker's own script into THIS
-					// worker's precache manifest. Browsers fetch service-worker
-					// scripts out-of-band (SW script requests aren't interceptable
-					// by another worker), so a cached copy would never actually be
-					// served to register() — it would just sit in the Cache API as
-					// a stale duplicate that has to be revalidated and evicted on
-					// every deploy, and would badly mislead anyone debugging why a
-					// change to the download worker "isn't taking effect".
-					'**/vault-download-sw.js'
-				],
+				globIgnores: ['**/ort-wasm-simd-threaded.asyncify.*.wasm'],
 
 
 				// navigateFallback points at index.html (not bare '/') so Workbox
@@ -189,19 +166,7 @@ export default defineConfig({
 				navigateFallbackDenylist: [
 					/^\/api\//,
 					/^\/sw\.js$/,
-					/^\/workbox-.*\.js$/,
-					// Streaming vault downloads (see static/vault-download-sw.js).
-					// A SECOND, narrowly-scoped service worker owns
-					// /vault-download/* and answers those requests with a streaming
-
-					// Content-Disposition: attachment response. The more specific
-					// scope already wins over this worker's '/', but a navigation
-					// request that somehow reached the NavigationRoute here would
-					// be answered with the precached index.html — rendering the app
-					// shell inside the hidden download iframe instead of starting a
-					// download. Excluded explicitly so that can never happen.
-					/^\/vault-download\//,
-
+					/^\/workbox-.*\.js$/
 				],
 
 
@@ -303,22 +268,7 @@ export default defineConfig({
 		global: 'globalThis'
 	},
 	optimizeDeps: {
-
-		// `libsodium-wrappers-sumo` is included for the same reason: it's a
-
-		// pure UMD/CJS bundle (no "exports" map, no .mjs build — see the
-		// NOTE at the top of this file). Without an explicit `include`,
-		// Vite's dev-time dependency crawler discovers it lazily on first
-		// import from a deep component (ExportModal.svelte →
-		// contract-store.svelte.ts → cesvu-crypto.ts), which can trigger a
-		// full-page reload mid-session as Vite re-optimizes, and in some
-		// cases leaves a half-initialized module whose `sodium.ready`
-		// promise resolves against a stale/empty exports object — surfacing
-		// as "libsodium-wrappers-sumo failed to load required constants"
-		// even though the package itself is fine. Forcing it into the
-		// initial optimize scan means it's bundled up front, deterministically,
-		// every time.
-		include: ['buffer', 'globalthis', 'libsodium-wrappers-sumo'],
+		include: ['buffer', 'globalthis'],
 
 		exclude: ['@huggingface/transformers']
 	},
@@ -331,13 +281,12 @@ export default defineConfig({
 	// Vitest runs tests in forked worker processes (default 'forks' pool).
 	// `NODE_OPTIONS=--max-old-space-size=...` set on the parent shell only
 	// applies to the parent vitest process — it is NOT inherited by the
-	// forked test workers. libsodium-wrappers-sumo's WASM heap, combined
-	// with running several crypto-heavy test files (large-payload
-	// encrypt/decrypt streaming round-trips) in one worker, can exceed
-	// Node's default old-space limit there, crashing with "FATAL ERROR:
-	// Reached heap limit Allocation failed - JavaScript heap out of
-	// memory" even though every individual test passes. In Vitest 4,
-	// `execArgv` moved from `test.poolOptions.forks.execArgv` to this
+	// forked test workers. Several large-payload round-trip test files
+	// running in one worker can exceed Node's default old-space limit
+	// there, crashing with "FATAL ERROR: Reached heap limit Allocation
+	// failed - JavaScript heap out of memory" even though every individual
+	// test passes. In Vitest 4, `execArgv` moved from
+	// `test.poolOptions.forks.execArgv` to this
 	// top-level `test.execArgv` (test.poolOptions was removed entirely —
 	// see https://vitest.dev/guide/migration#pool-rework). It's passed
 	// directly to each forked/threaded worker process.

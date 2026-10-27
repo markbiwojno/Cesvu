@@ -10,8 +10,9 @@
  * whitelist, so any field a newer peer wrote (or any field a future schema adds)
  * vanished the moment an older build re-imported and re-exported the document.
  *
- * The round-trip exercises the REAL crypto envelope (Argon2id + AES-256-GCM),
- * so it also incidentally proves encrypt/decrypt agree on the wire format.
+ * The round-trip exercises the REAL plain `.cesvu` container (SHA-256
+ * checksummed, see cesvu-crypto.ts), so it also incidentally proves
+ * build/parse agree on the wire format.
  */
 
 import { describe, it, expect } from 'vitest';
@@ -44,12 +45,12 @@ describe('importFromCesvu — forward-compat field preservation', () => {
 		} as unknown as DocumentPatch;
 		await updateDocument(doc.id, futurePatch);
 
-		// 2. Export → encrypted .cesvu blob + the diceware words.
-		const { words, blob } = await exportAsCesvu(doc.id);
+		// 2. Export → plain, checksummed .cesvu blob.
+		const { blob } = await exportAsCesvu(doc.id);
 		const file = blobToFile(blob, 'forward-compat.cesvu');
 
-		// 3. Import it back with the same passphrase.
-		const imported = await importFromCesvu(file, words.join(' '));
+		// 3. Import it back.
+		const imported = await importFromCesvu(file);
 
 		// 4. The unknown fields must have survived verbatim.
 		const round = imported as unknown as {
@@ -80,10 +81,10 @@ describe('importFromCesvu — forward-compat field preservation', () => {
 		// text:'' is still a string (valid) — instead corrupt sourceType.
 		await updateDocument(doc.id, { sourceType: 'bogus' } as unknown as DocumentPatch);
 
-		const { words, blob } = await exportAsCesvu(doc.id);
+		const { blob } = await exportAsCesvu(doc.id);
 		const file = blobToFile(blob, 'broken.cesvu');
 
-		await expect(importFromCesvu(file, words.join(' '))).rejects.toThrow(
+		await expect(importFromCesvu(file)).rejects.toThrow(
 			/corrupted/i
 		);
 	}, 20_000);
@@ -108,8 +109,8 @@ describe('importFromCesvu — field normalization & default-secure export', () =
 		};
 		await updateDocument(doc.id, { profile } as unknown as DocumentPatch);
 
-		const { words, blob } = await exportAsCesvu(doc.id);
-		const imported = await importFromCesvu(blobToFile(blob, 'p.cesvu'), words.join(' '));
+		const { blob } = await exportAsCesvu(doc.id);
+		const imported = await importFromCesvu(blobToFile(blob, 'p.cesvu'));
 
 		// The parties (and the rest of the profile) survive the envelope intact.
 		expect(imported.profile).toEqual(profile);
@@ -123,8 +124,8 @@ describe('importFromCesvu — field normalization & default-secure export', () =
 		});
 		const createdAt = doc.createdAt;
 
-		const { words, blob } = await exportAsCesvu(doc.id);
-		const imported = await importFromCesvu(blobToFile(blob, 'd.cesvu'), words.join(' '));
+		const { blob } = await exportAsCesvu(doc.id);
+		const imported = await importFromCesvu(blobToFile(blob, 'd.cesvu'));
 
 		expect(imported.sourceType).toBe('csv');
 		// createdAt is an immutable identity field and must survive verbatim.
@@ -140,17 +141,17 @@ describe('importFromCesvu — field normalization & default-secure export', () =
 			rawContent
 		});
 
-		const { words, blob } = await exportAsCesvu(doc.id, { includeSource: true });
-		const imported = await importFromCesvu(blobToFile(blob, 's.cesvu'), words.join(' '));
+		const { blob } = await exportAsCesvu(doc.id, { includeSource: true });
+		const imported = await importFromCesvu(blobToFile(blob, 's.cesvu'));
 
-		// The .cesvu v2 CFP1 framing carries the source bytes as a raw
-		// Uint8Array appended after the JSON envelope (see
-		// contract-store.svelte.ts), NOT re-encoded back to base64 — a large
-		// (multi-hundred-MB) source file re-encoded to a base64 STRING can
-		// blow past `RangeError: Invalid string length`, even when the
-		// underlying byte array fits in memory fine. `importFromCesvu`
-		// therefore hands back a Uint8Array VIEW over the decrypted
-		// plaintext, not a string. Decode both sides to bytes to compare.
+		// The CFP1 framing carries the source bytes as a raw Uint8Array
+		// appended after the JSON envelope (see contract-store.svelte.ts),
+		// NOT re-encoded back to base64 — a large (multi-hundred-MB) source
+		// file re-encoded to a base64 STRING can blow past `RangeError:
+		// Invalid string length`, even when the underlying byte array fits
+		// in memory fine. `importFromCesvu` therefore hands back a
+		// Uint8Array VIEW over the decoded plaintext, not a string. Decode
+		// both sides to bytes to compare.
 		expect(imported.rawContent).toBeInstanceOf(Uint8Array);
 		const importedBytes = imported.rawContent as Uint8Array;
 		const originalBytes = Uint8Array.from(atob(rawContent), (c) => c.charCodeAt(0));
@@ -167,8 +168,8 @@ describe('importFromCesvu — field normalization & default-secure export', () =
 		});
 
 		// No options → includeSource defaults to false → source bytes omitted.
-		const { words, blob } = await exportAsCesvu(doc.id);
-		const imported = await importFromCesvu(blobToFile(blob, 's.cesvu'), words.join(' '));
+		const { blob } = await exportAsCesvu(doc.id);
+		const imported = await importFromCesvu(blobToFile(blob, 's.cesvu'));
 
 		expect(imported.rawContent).toBeNull();
 	}, 20_000);
@@ -183,8 +184,8 @@ describe('importFromCesvu — field normalization & default-secure export', () =
 			splits: { mode: 'bogus', manual: [3, 7] }
 		} as unknown as DocumentPatch);
 
-		const { words, blob } = await exportAsCesvu(doc.id);
-		const imported = await importFromCesvu(blobToFile(blob, 'sp.cesvu'), words.join(' '));
+		const { blob } = await exportAsCesvu(doc.id);
+		const imported = await importFromCesvu(blobToFile(blob, 'sp.cesvu'));
 
 		expect(imported.splits.mode).toBe('manual'); // unknown mode → 'manual'
 		expect(imported.splits.manual).toEqual([3, 7]); // valid array preserved
@@ -200,9 +201,9 @@ describe('importFromCesvu — field normalization & default-secure export', () =
 		// Corrupt `text` to a non-string via an unchecked patch.
 		await updateDocument(doc.id, { text: 123 } as unknown as DocumentPatch);
 
-		const { words, blob } = await exportAsCesvu(doc.id);
+		const { blob } = await exportAsCesvu(doc.id);
 		const file = blobToFile(blob, 'bad.cesvu');
 
-		await expect(importFromCesvu(file, words.join(' '))).rejects.toThrow(/corrupted/i);
+		await expect(importFromCesvu(file)).rejects.toThrow(/corrupted/i);
 	}, 20_000);
 });

@@ -164,7 +164,7 @@ export async function parsePDFBytes(
 	size?: number
 ): Promise<ParsedFile> {
 	// Normalize to a plain ArrayBuffer view starting at byte 0 — subarray()
-	// views (e.g. from decryptCesvu's plaintext.subarray()) may have a
+	// views (e.g. from a .cesvu import's decoded payload) may have a
 	// non-zero byteOffset or not span the whole underlying buffer.
 	const rawContent: ArrayBuffer =
 		bytes.byteOffset === 0 &&

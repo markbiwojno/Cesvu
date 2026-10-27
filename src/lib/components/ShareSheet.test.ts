@@ -81,16 +81,15 @@ describe('detectIOS', () => {
 });
 
 describe('buildEmailBody', () => {
-	it('never contains a passphrase-shaped hint — the passcode always travels separately', () => {
+	it('never contains a passphrase-shaped hint — this build has no passcode', () => {
 		const body = buildEmailBody();
 		expect(body).not.toMatch(/passphrase:|passcode:/i);
 	});
 
-	it('includes the visit/upload/enter-passcode instructions and the cesvu.com link', () => {
+	it('includes the visit/upload instructions and the cesvu.com link', () => {
 		const body = buildEmailBody();
 		expect(body).toContain('https://cesvu.com');
 		expect(body).toContain('Upload this attachment');
-		expect(body).toContain('Enter the passcode (arriving separately)');
 	});
 
 	it('is stable/deterministic across calls', () => {

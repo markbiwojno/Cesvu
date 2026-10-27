@@ -17,10 +17,7 @@
  * IMPORTANT: none of the ids produced here are security-sensitive. They are
  * local storage keys (IndexedDB rows), Svelte `{#each ... (id)}` list keys,
  * or request/response correlation ids for postMessage round-trips with a
- * worker. Actual cryptographic randomness (salts, nonces, keys) always comes
- * from libsodium (`sodium.randombytes_buf`, Argon2id) — a separate, always
- * cryptographically-strong RNG untouched by this fallback. Do NOT use this
- * helper for anything that needs to be unguessable.
+ * worker. Do NOT use this helper for anything that needs to be unguessable.
  */
 
 /**

@@ -2,38 +2,20 @@
  * cesvu-filename.ts — shared helper for building the OUTER (on-disk)
  * filename of a downloaded/saved `.cesvu` file from an original filename.
  *
- * Zero-knowledge design note: the original filename + extension are always
- * encrypted INSIDE the `.cesvu` envelope's metadata (see CesvuMetadata /
- * cli.py's cmd_decrypt), so they're protected by the passphrase. But the
- * OUTER filename — what a mail client, cloud drive, or Finder/Explorer
- * window shows before anyone even enters a passphrase — is NOT protected
- * by anything. Naming a download "quarterly-layoffs-plan.xlsx.cesvu"
- * leaks both the subject matter (via the base name) and the file type
- * (via the embedded extension) to anyone who merely sees the file sitting
- * in a downloads folder or inbox, undermining the "we never learn
- * anything about your data" pitch of a zero-knowledge product.
- *
- * The chosen middle ground (see project discussion): keep the original
- * base name (still somewhat identifying, but genuinely useful so multiple
- * exports don't all collide under one generic name and so the sender can
- * tell them apart later), but ALWAYS strip the original extension before
- * appending ".cesvu" — so `document.txt` becomes `document.cesvu`, never
- * the doubled `document.txt.cesvu`. This is used consistently by:
- *   - vault-io.ts's exportRawFileToVault (vault save/download name)
- *   - the Python CLI's cmd_encrypt (see cli.py, mirrors this same logic)
- *
- * NOTE: ExportModal.svelte (the in-viewer document export) deliberately
- * does NOT use the derive-from-original-name behavior. It always emits the
- * generic DEFAULT_CESVU_DOWNLOAD_NAME below, because that download is the
- * artifact users actually send to other people, so even the base name is
- * worth withholding. See exportFileName() there.
+ * Design note: the original filename + extension travel INSIDE the
+ * `.cesvu` file's metadata (see CesvuMetadata), separate from the OUTER
+ * filename — what a mail client, cloud drive, or Finder/Explorer window
+ * shows. ExportModal.svelte's document export always emits the generic
+ * DEFAULT_CESVU_DOWNLOAD_NAME below rather than deriving a name from the
+ * document, so multiple exports don't collide and the artifact handed to
+ * another person doesn't editorialize the subject matter in its filename.
+ * See exportFileName() in ExportModal.svelte.
  */
 
 /**
  * The generic outer filename used when no original name is available (and,
- * for the viewer's document export, unconditionally). Anything the
- * recipient legitimately needs — the real filename and extension — travels
- * encrypted inside the envelope's metadata instead.
+ * for the viewer's document export, unconditionally). The real filename
+ * and extension travel inside the file's metadata instead.
  */
 export const DEFAULT_CESVU_DOWNLOAD_NAME = 'cesvu-document.cesvu';
 
