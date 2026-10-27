@@ -123,6 +123,7 @@
 		try {
 			const result = await exportAsCesvu(documentId, { includeSource });
 			blob = result.blob;
+			download();
 			phase = 'done';
 		} catch (e) {
 			error = e instanceof Error ? e.message : describeExportError(e);

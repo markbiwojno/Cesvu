@@ -331,6 +331,7 @@ function describeImportError(err: unknown): string {
 				return err.message || 'This file needs a newer version of Cesvu.';
 			case 'METADATA_CORRUPT':
 			case 'METADATA_INCOMPLETE':
+			case 'BAD_PREAMBLE_LENGTH':
 			case 'TOO_SHORT':
 				return 'This file appears to be corrupted.';
 			case 'CORRUPTED':

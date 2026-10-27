@@ -447,8 +447,12 @@
 	let showExport = $state(false);
 	let preparingExport = $state(false);
 
-	/** A file is open → the user can package it up as a .cesvu file. */
+	/** A file is open → the Share button is visible at all. */
 	const canExport = $derived(workspace.hasFile);
+	/** Green/enabled only once the user has added at least one note — an
+	 *  export with no annotations has nothing worth sharing yet. Mirrors the
+	 *  former "Send Back" button's ready-gate. */
+	const shareReady = $derived(notesStore.count > 0);
 
 	/**
 	 * Open the Export flow. Ensures a persisted CesvuDocument exists first
@@ -462,6 +466,7 @@
 	 * reply files.
 	 */
 	async function openExport() {
+		if (!shareReady) return;
 		const f = workspace.file;
 		if (!f) return;
 		if (!workspace.activeContractId) {
@@ -663,13 +668,19 @@
 
 		{/if}
 
-		<!-- Share (.cesvu export). Import lives on the upload/landing page. -->
+		<!-- Share (.cesvu export). Import lives on the upload/landing page.
+		     Greyed out/disabled until the user has added at least one note;
+		     turns blue/enabled the instant one exists. -->
 		{#if canExport}
 			<div class="flex items-center gap-1.5 flex-shrink-0">
 				<button
 					onclick={openExport}
-					disabled={preparingExport}
-					class="px-3 py-1.5 rounded-lg bg-blue-700 hover:bg-blue-600 disabled:opacity-50 text-xs font-medium text-white transition-colors"
+					disabled={preparingExport || !shareReady}
+					title={shareReady ? 'Share this document' : 'Add a note to enable Share'}
+					class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed
+						{shareReady
+							? 'bg-blue-700 hover:bg-blue-600 text-white'
+							: 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500 opacity-50'}"
 				>
 				{preparingExport ? 'Preparing…' : 'Share'}
 				</button>
