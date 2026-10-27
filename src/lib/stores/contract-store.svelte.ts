@@ -9,11 +9,13 @@
  *
  * ⚠️  IN-MEMORY BY DESIGN — there is NO persistence at rest. Documents live in
  * a module-scope Map for the lifetime of the page; a refresh or tab close wipes
- * everything. To keep work, the user EXPORTS to an encrypted .cesvu file (the
- * only durable, portable form). NO IndexedDB, NO localStorage, NO sync, NO
- * migrations. The plaintext-in-memory note from schema.ts still applies: the
- * record is plaintext while it lives in memory; only the .cesvu export is
- * encrypted.
+ * everything. To keep work, the user EXPORTS to a `.cesvu` file (the only
+ * durable, portable form). NO IndexedDB, NO localStorage, NO sync, NO
+ * migrations.
+ *
+ * NOTE: the `.cesvu` export produced by this build is PLAIN (unencrypted) —
+ * see cesvu-crypto.ts's top doc comment. It carries a SHA-256 integrity
+ * checksum only, not confidentiality.
  *
  * MEMORY NOTES:
  *   - The reactive `documentsStore` holds lightweight {@link DocumentSummary}
@@ -38,13 +40,9 @@ import {
 } from '$lib/schema.js';
 
 import {
-	generateDicewarePassphrase,
-	generateEmojiPassphrase,
-	encryptCesvu,
-	decryptCesvu,
-	CesvuError,
-	type CesvuMetadata,
-	type PassphraseType
+	buildCesvuFile,
+	parseCesvuFile,
+	CesvuError
 } from '$lib/crypto/cesvu-crypto.js';
 
 
@@ -193,8 +191,8 @@ export async function deleteDocument(id: string): Promise<void> {
 
 // ── .cesvu payload framing (CFP1) ─────────────────────────────────────────
 //
-// The bytes handed to encryptCesvu() are framed so the original source file
-// travels as a RAW BINARY section instead of base64-inside-JSON. Layout:
+// The bytes handed to buildCesvuFile() are framed so the original source
+// file travels as a RAW BINARY section instead of base64-inside-JSON. Layout:
 //   [0..3]           magic 'CFP1'
 //   [4..7]           uint32 BE  docJson length
 //   [8 .. 8+len)     docJson (UTF-8; the CesvuDocument WITHOUT rawContent)
@@ -246,9 +244,7 @@ function decodeBase64Into(b64: string, target: Uint8Array, offset: number): void
  * document's own JSON (with `rawContent` stripped, since the source bytes
  * ride as a separate raw section) followed by the original source bytes
  * (when `includeSource` is true and the record actually carries any).
- * Shared by {@link exportAsCesvu} (fresh, generated passphrase) and
- * {@link sendBackAsCesvu} (the SAME passphrase the recipient already has) —
- * the framing is identical either way, only the passphrase source differs.
+ * Used by {@link exportAsCesvu}.
  *
  * Throws a plain Error if the document id is unknown.
  */
@@ -289,157 +285,56 @@ async function buildExportPayload(
 }
 
 /**
- * Export a stored document as a portable .cesvu file, secured by a freshly
- * generated 6-word diceware passphrase.
- *
- * Returns BOTH the words (to display to the sender, who communicates them
- * out-of-band) and the file blob (for download). The passphrase is never
- * persisted anywhere — it lives only in the returned array and whatever the
- * caller renders on screen for the user to write down.
+ * Export a stored document as a portable, plain (unencrypted) `.cesvu`
+ * file. See cesvu-crypto.ts's top doc comment: this carries a SHA-256
+ * integrity checksum only, not confidentiality.
  *
  * `options.includeSource` controls whether the original file bytes
- * (`rawContent`, base64 of the source PDF/DOCX/CSV/XLSX) are written into the
- * encrypted envelope. It DEFAULTS TO FALSE — the .cesvu carries only the
- * extracted text + analysis (notes, clauses, profile, splits) unless the sender
- * explicitly opts in. The source bytes are stripped from the copy we encrypt, so
- * a recipient of a "no source" file literally never receives the original
- * binary. (CSV/XLSX callers pass `includeSource: true` because their viewers
- * reconstruct the interactive table from the raw bytes.)
- *
- * `options.passphraseType` picks which passphrase scheme secures the file:
- *   - `'diceware'` (default) — 6 EFF words, joined with spaces.
- *   - `'emoji'` — 8 emoji from the curated wordlist, joined with NO separator
- *     (the passphrase string is the raw Unicode concatenation).
- * In both cases the returned `words` array is what the UI displays/copies —
- * word strings for diceware, single emoji characters for emoji. The caller
- * (ExportModal) knows which it asked for and renders accordingly.
+ * (`rawContent`, base64 of the source PDF/DOCX/CSV/XLSX) are written into
+ * the file. It DEFAULTS TO FALSE — the `.cesvu` carries only the extracted
+ * text + analysis (notes, clauses, profile, splits) unless the sender
+ * explicitly opts in. (CSV/XLSX callers pass `includeSource: true` because
+ * their viewers reconstruct the interactive table from the raw bytes.)
  *
  * Throws a plain Error if the document id is unknown.
  */
 export async function exportAsCesvu(
 	documentId: string,
-	options: {
-		includeSource?: boolean;
-		passphraseType?: PassphraseType;
-		/** Required when `passphraseType === 'raw'` — the user-chosen password. */
-		rawPassphrase?: string;
-	} = {}
-): Promise<{ words: string[]; blob: Blob }> {
+	options: { includeSource?: boolean } = {}
+): Promise<{ blob: Blob }> {
 	const includeSource = options.includeSource ?? false;
 	const { doc, plaintext } = await buildExportPayload(documentId, includeSource);
 
-	const passphraseType = options.passphraseType ?? 'diceware';
-	if (passphraseType === 'raw' && !options.rawPassphrase) {
-		throw new Error('exportAsCesvu: rawPassphrase is required when passphraseType is "raw"');
-	}
-	const words =
-		passphraseType === 'emoji'
-			? await generateEmojiPassphrase(8)
-			: passphraseType === 'raw'
-				? [options.rawPassphrase!]
-				: await generateDicewarePassphrase(6);
-
 	const metadata = {
 		filename: doc.name || 'document',
 		mimeType: 'application/json',
 		createdAt: Date.now()
 	};
 
-	const passphrase = passphraseType === 'emoji' ? words.join('') : words.join(' ');
-	const encrypted = await encryptCesvu(plaintext, passphrase, { metadata, passphraseType });
-
-	const blob = new Blob([encrypted as BlobPart], { type: 'application/octet-stream' });
-	return { words, blob };
-}
-
-/**
- * Re-encrypt a stored document as a portable .cesvu "Send Back" reply,
- * reusing the EXACT passphrase the recipient already holds (captured at
- * unlock time — see sessionKey.svelte.ts) instead of generating a new one.
- * The sender never needs to be told a new passphrase: they already have it.
- *
- * SECURITY — unlinkability: {@link encryptCesvu} (via encryptCesvuStream)
- * draws a brand-new random salt on EVERY call regardless of whether the
- * passphrase is reused, so two files encrypted under the identical
- * passphrase still derive different keys and produce unrelated ciphertext —
- * an observer holding both files cannot tell they share a passphrase just by
- * comparing salts/headers/bytes. See cesvu-crypto.test.ts's salt-uniqueness
- * regression test.
- *
- * `passphraseType` MUST be the same profile the document was originally
- * unlocked with (diceware / emoji / raw) — it selects the SAME
- * passphrase-normalization the recipient's original unlock used, which is
- * exactly what sessionKeyStore records alongside the passphrase itself.
- *
- * `options.includeSource` mirrors {@link exportAsCesvu} but DEFAULTS TO TRUE
- * here (matching the "Send back document" modal's default-checked "Include
- * the original file" checkbox) — the sender already has the original file
- * on disk, so replying with it too is the friendlier default for a reply.
- *
- * Throws a plain Error if the document id is unknown.
- */
-export async function sendBackAsCesvu(
-	documentId: string,
-	passphrase: string,
-	passphraseType: PassphraseType,
-	options: { includeSource?: boolean } = {}
-): Promise<{ blob: Blob }> {
-	const includeSource = options.includeSource ?? true;
-	const { doc, plaintext } = await buildExportPayload(documentId, includeSource);
-
-	const metadata = {
-		filename: doc.name || 'document',
-		mimeType: 'application/json',
-		createdAt: Date.now()
-	};
-
-	const encrypted = await encryptCesvu(plaintext, passphrase, { metadata, passphraseType });
-	const blob = new Blob([encrypted as BlobPart], { type: 'application/octet-stream' });
+	const file = await buildCesvuFile(plaintext, metadata);
+	const blob = new Blob([file as BlobPart], { type: 'application/octet-stream' });
 	return { blob };
 }
 
 /**
- * Thrown by {@link importFromCesvu} when decryption succeeds (the
- * passphrase was correct, the MAC verified) but the plaintext isn't a
- * JSON-encoded {@link CesvuDocument} at all — it's a raw file that was
- * encrypted via the "vault" flow (see src/lib/crypto/vault-io.ts's
- * `exportRawFileToVault`, used for files the in-app viewer can't open,
- * e.g. images/zips/etc.). This is NOT a corruption/error case: the bytes
- * are authentic and intact, they just aren't a document. Callers (see
- * ImportModal.svelte) should catch this and offer the plaintext as a
- * normal file download instead of showing an error.
- */
-export class RawVaultPayloadError extends Error {
-	readonly plaintext: Uint8Array;
-	readonly metadata: CesvuMetadata;
-	constructor(plaintext: Uint8Array, metadata: CesvuMetadata) {
-		super('This .cesvu file wraps a raw (non-document) file, not a document.');
-		this.name = 'RawVaultPayloadError';
-		this.plaintext = plaintext;
-		this.metadata = metadata;
-	}
-}
-
-/**
  * Map a low-level {@link CesvuError} to a short, user-facing message. Anything
- * that isn't a recognized envelope error becomes the generic fallback so we
- * never leak crypto internals into the UI.
+ * that isn't a recognized error becomes the generic fallback so we never
+ * leak internals into the UI.
  */
 function describeImportError(err: unknown): string {
 
 	if (err instanceof CesvuError) {
 		switch (err.code) {
-			case 'DECRYPT_FAILED':
-			case 'WRONG_PASSPHRASE_OR_HEADER_TAMPER':
-				return 'Wrong passphrase. Check the words or emoji and try again.';
 			case 'BAD_MAGIC':
 				return 'This is not a .cesvu file.';
 			case 'UNSUPPORTED_VERSION':
-				return 'This file needs a newer version of Cesvu.';
+				return err.message || 'This file needs a newer version of Cesvu.';
 			case 'METADATA_CORRUPT':
+			case 'METADATA_INCOMPLETE':
+			case 'TOO_SHORT':
 				return 'This file appears to be corrupted.';
-			case 'PASSPHRASE_TOO_LONG':
-				return 'That password is too long.';
+			case 'CORRUPTED':
+				return 'This file appears to be corrupted \u2014 its contents don\u2019t match the stored checksum.';
 			default:
 				return 'Unable to import this file.';
 
@@ -555,43 +450,25 @@ function normalizeCesvuDocument(value: unknown): CesvuDocument | null {
 }
 
 /**
- * Import a .cesvu file: unlock it with the supplied passphrase, validate the
- * decoded document, store it in the in-memory map, and return it.
+ * Import a plain (unencrypted) `.cesvu` file: verify its integrity
+ * checksum, validate the decoded document, store it in the in-memory map,
+ * and return it.
  *
  * Throws an Error whose message is already user-facing (see
  * {@link describeImportError}) — the caller can surface `err.message` directly.
  */
-export async function importFromCesvu(
-	file: File,
-	passphrase: string,
-	preferredType?: PassphraseType
-): Promise<CesvuDocument> {
+export async function importFromCesvu(file: File): Promise<CesvuDocument> {
 
 	let plaintext: Uint8Array;
-	let decryptedMetadata: CesvuMetadata;
 	try {
 		const bytes = new Uint8Array(await file.arrayBuffer());
-		({ plaintext, metadata: decryptedMetadata } = await decryptCesvu(
-			bytes,
-			passphrase,
-			preferredType
-		));
+		({ payload: plaintext } = await parseCesvuFile(bytes));
 	} catch (err) {
 		throw new Error(describeImportError(err));
 	}
 
-	// The vault flow (src/lib/crypto/vault-io.ts's exportRawFileToVault, used
-	// for files the in-app viewer can't open — images, zips, etc.) encrypts
-	// RAW file bytes with no CFP1 framing at all, unlike every document
-	// export from this store (exportAsCesvu always writes the CFP1 magic).
-	// Decryption above already authenticated these bytes (a wrong passphrase
-	// or tampered/corrupt ciphertext would have thrown DECRYPT_FAILED before
-	// we ever get here) — so "not CFP1-framed" here means "this is a raw
-	// vault file, not a document", not "corrupted". Hand it back to the
-	// caller (ImportModal.svelte) to save as a normal download instead of
-	// erroring.
 	if (!hasPayloadMagic(plaintext)) {
-		throw new RawVaultPayloadError(plaintext, decryptedMetadata);
+		throw new Error('This file appears to be corrupted.');
 	}
 
 	let parsed: unknown;

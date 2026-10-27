@@ -10,11 +10,8 @@
 	import { mode } from 'mode-watcher';
 	import { DEFAULT_MODELS } from '$lib/stores/workspace.svelte.js';
 	import { notesStore } from '$lib/stores/notesStore.svelte.js';
-	import { sessionKeyStore } from '$lib/stores/sessionKey.svelte.js';
 	import ExportModal from '$lib/components/ExportModal.svelte';
-	import SendBackModal from '$lib/components/SendBackModal.svelte';
 	import type { ParsedFile } from '$lib/types.js';
-	import { isVaultCandidate, VAULT_IMPORT_STREAM_THRESHOLD_BYTES } from '$lib/crypto/vault-constants.js';
 	import { dropContainsDirectory } from '$lib/utils/drag-drop.js';
 	import { parsedFileToDocumentInit } from '$lib/utils/parsed-file-to-document.js';
 
@@ -242,13 +239,11 @@
 		dragCounter = 0;
 		isFileDragging = false;
 		// A dropped FOLDER hands back a synthetic zero-byte File (see
-		// drag-drop.ts's doc comment) that would otherwise sail through
-		// isVaultCandidate() below (folders have no recognized extension)
-		// and get "encrypted" into a blank, useless .cesvu file. Reject it
-		// here with a toast instead.
+		// drag-drop.ts's doc comment). Reject it here with a toast instead
+		// of letting it sail through as a bogus "file".
 		if (dropContainsDirectory(e)) {
 			workspace.showToast(
-				"Folders can't be opened or encrypted — drop an individual file instead.",
+				"Folders can't be opened — drop an individual file instead.",
 				3500
 			);
 			return;
@@ -257,25 +252,9 @@
 		const file = e.dataTransfer?.files?.[0];
 		if (!file) return;
 
-		// .cesvu files route to the unlock flow — oversized ones (see
-		// vault-constants.ts's VAULT_IMPORT_STREAM_THRESHOLD_BYTES) skip the
-		// in-memory unlock + viewer and go straight to the "decrypt to disk"
-		// flow instead (DocumentPane owns both; this just queues the request).
+		// .cesvu files route to the open flow.
 		if (file.name.toLowerCase().endsWith('.cesvu')) {
-			if (file.size > VAULT_IMPORT_STREAM_THRESHOLD_BYTES) {
-				workspace.requestVaultDecrypt(file);
-			} else {
-				workspace.requestImport(file);
-			}
-			return;
-		}
-		// A file the in-app viewer can't open at all (see isVaultCandidate) is
-		// only actionable once a document is already open — pre-upload, the
-		// landing FileDropzone's own onFileSelected handles this same routing.
-		// Here (workspace-wide drop, i.e. a document IS open) offer to encrypt
-		// it straight to disk instead of silently doing nothing.
-		if (workspace.hasFile && isVaultCandidate(file)) {
-			workspace.requestVaultEncrypt(file);
+			workspace.requestImport(file);
 		}
 	}
 
@@ -290,19 +269,9 @@
 	 * shown by older browsers; modern ones display their own generic message, so
 	 * we set both `returnValue` and the return value for maximum compatibility.
 	 *
-	 * Also fires whenever a vault operation (Export encrypt, SecureSaveModal
-	 * encrypt, or SecureOpenModal decrypt) is actively streaming — see
-	 * workspace.svelte.ts's `activeVaultOperations` doc comment. That case
-	 * matters even MORE than the general "in-progress work" case above: an
-	 * abandoned encrypt/decrypt can leave a truncated, unusable file
-	 * half-written to disk, not just lost in-memory state. The in-modal
-	 * `dismissible={false}` guard (Modal.svelte) already blocks
-	 * backdrop-click/Escape/✕ from tearing the modal down mid-operation; this
-	 * is the outer safety net for an actual tab close/refresh, which no
-	 * in-page guard can intercept.
 	 */
 	function onBeforeUnload(e: BeforeUnloadEvent) {
-		if (workspace.hasFile || notesStore.count > 0 || workspace.hasActiveVaultOperation) {
+		if (workspace.hasFile || notesStore.count > 0) {
 			e.preventDefault();
 			e.returnValue = 'Your in progress work will be lost';
 			return 'Your in progress work will be lost';
@@ -480,35 +449,6 @@
 
 	/** A file is open → the user can package it up as a .cesvu file. */
 	const canExport = $derived(workspace.hasFile);
-
-	// ============================================================
-	// "Send Back" (.cesvu reply, reusing the recipient's own passphrase)
-	//
-	// Visible ONLY when this session was opened by unlocking a .cesvu (see
-	// workspace.openedFromCesvu — set exclusively by DocumentPane's in-memory
-	// unlock path, never the oversized decrypt-to-disk or raw-vault-download
-	// paths). Greyed out/disabled until BOTH:
-	//   - the user has added at least one note (notesStore.count > 0), and
-	//   - the passphrase captured at unlock time is still live in memory
-	//     (sessionKeyStore.hasKeyFor — see sessionKey.svelte.ts for the
-	//     15-minute-inactivity / tab-hidden / document-close clearing rules).
-	// If the key clears while notes still exist, this button greys back out
-	// LIVE rather than disappearing — the user must re-open/re-unlock the
-	// .cesvu to regain a live key.
-	// ============================================================
-	let showSendBack = $state(false);
-
-	/** Visible whenever this session came from unlocking a .cesvu. */
-	const canSendBack = $derived(workspace.openedFromCesvu);
-	/** Green/enabled only with notes AND a still-live passphrase. */
-	const sendBackReady = $derived(
-		canSendBack && notesStore.count > 0 && sessionKeyStore.hasKeyFor(workspace.activeContractId)
-	);
-
-	function openSendBack() {
-		if (!sendBackReady) return;
-		showSendBack = true;
-	}
 
 	/**
 	 * Open the Export flow. Ensures a persisted CesvuDocument exists first
@@ -737,32 +677,6 @@
 			</div>
 		{/if}
 
-		<!-- Send Back — only for documents opened from a .cesvu (see
-		     canSendBack above). Greyed out/disabled until the user has added
-		     a note AND the unlock-time passphrase is still live in memory;
-		     turns green the instant both are true, and greys back out live if
-		     the key clears (inactivity / tab-hidden / close). -->
-		{#if canSendBack}
-			<div class="flex items-center gap-1.5 flex-shrink-0">
-				<button
-					onclick={openSendBack}
-					disabled={!sendBackReady}
-					title={sendBackReady
-						? 'Send back an encrypted reply with your annotations'
-						: notesStore.count === 0
-							? 'Add a note to enable Send Back'
-							: 'Re-open this .cesvu to restore the passphrase'}
-					class="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors disabled:cursor-not-allowed
-						{sendBackReady
-							? 'bg-green-700 hover:bg-green-600 text-white'
-							: 'bg-gray-100 dark:bg-slate-800 text-gray-400 dark:text-gray-500 opacity-50'}"
-				>
-					Reply
-				</button>
-
-			</div>
-		{/if}
-
 	</header>
 
 	<!-- Fixed-position Model dropdown panel — rendered OUTSIDE the
@@ -925,20 +839,6 @@
 		onclose={() => (showExport = false)}
 	/>
 
-{/if}
-
-<!-- Send Back modal — only mountable while a live key still exists for the
-     active document (sendBackReady already gates the button, but the key
-     could in principle clear between the click and this render, e.g. a
-     visibilitychange firing mid-click; getPassphrase() returning null is
-     handled defensively by simply not rendering the modal). -->
-{#if showSendBack && workspace.activeContractId && sessionKeyStore.hasKeyFor(workspace.activeContractId) && sessionKeyStore.getPassphrase() && sessionKeyStore.passphraseType}
-	<SendBackModal
-		documentId={workspace.activeContractId}
-		passphrase={sessionKeyStore.getPassphrase() ?? ''}
-		passphraseType={sessionKeyStore.passphraseType}
-		onclose={() => (showSendBack = false)}
-	/>
 {/if}
 
 

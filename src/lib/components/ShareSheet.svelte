@@ -1,18 +1,13 @@
 <script module lang="ts">
 	/**
-	 * ShareSheet.svelte — Web Share API flow for an already-encrypted
-	 * `.cesvu` `File` living in memory.
+	 * ShareSheet.svelte — Web Share API flow for an already-built `.cesvu`
+	 * `File` living in memory.
 	 *
-	 * Wired ONLY to ExportModal.svelte's "I've stored these words/emoji"
-	 * button for now (see its `confirmStored()`/`phase === 'sharing'`).
-	 * Intentionally NOT yet wired to Workspace.svelte's "Send Back" button
-	 * or ImportModal.svelte's "Choose a file to send back" — both produce
-	 * the same kind of in-memory encrypted `File` via SendBackModal.svelte
-	 * and are natural future callers once this flow has been exercised by
-	 * real "Share" traffic.
+	 * Wired to ExportModal.svelte's "Share" button (see its `share()`/
+	 * `phase === 'sharing'`).
 	 *
 	 * ── Why the Web Share API, and what it can't do ─────────────────────────
-	 * `navigator.share({ files })` hands the encrypted file to the OS-native
+	 * `navigator.share({ files })` hands the file to the OS-native
 	 * share sheet. Cesvu has NO control over which destination app the user
 	 * picks (Gmail, Apple Mail, WhatsApp, etc.) and no visibility into what
 	 * happens after the sheet opens — the destination app owns its own
@@ -59,19 +54,17 @@
 	}
 
 	/** Shared by the standard-path share() call and (as a display copy for
-	 *  the clipboard) the iOS two-step path. Never contains the passphrase —
-	 *  the passcode is always meant to travel through a different channel. */
+	 *  the clipboard) the iOS two-step path. */
 	export function buildEmailBody(): string {
-		return `I sent you an encrypted file — here's how to open it:
+		return `I sent you a file — here's how to open it:
 
 1. Visit https://cesvu.com
 2. Upload this attachment
-3. Enter the passcode (arriving separately)
 
 Takes 30 seconds. Free, no account needed, your file never
 leaves your browser.
 
-Want to send me an encrypted file back using the same passphrase? → https://cesvu.com`;
+Want to send me a file back? → https://cesvu.com`;
 	}
 </script>
 
@@ -80,7 +73,7 @@ Want to send me an encrypted file back using the same passphrase? → https://ce
 	import { copyTextToClipboard } from '$lib/utils/clipboard.js';
 
 	interface Props {
-		/** The already-encrypted `.cesvu` file, held only in memory. */
+		/** The already-built `.cesvu` file, held only in memory. */
 		file: File;
 		/**
 		 * Run the app's existing default behavior (today: download the file
@@ -132,7 +125,7 @@ Want to send me an encrypted file back using the same passphrase? → https://ce
 
 		state = 'status-standard';
 		try {
-			await navigator.share({ title: 'Encrypted file', text: buildEmailBody(), files: [file] });
+			await navigator.share({ title: 'Cesvu file', text: buildEmailBody(), files: [file] });
 			state = 'success';
 		} catch (err) {
 			if (isAbortError(err)) {
@@ -167,7 +160,7 @@ Want to send me an encrypted file back using the same passphrase? → https://ce
 {#if state === 'starting' || state === 'status-standard'}
 	<div class="flex flex-col items-center justify-center gap-3 py-10 text-center">
 		<div class="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 dark:border-slate-700 border-t-blue-500"></div>
-		<p class="text-sm text-gray-500 dark:text-gray-400">🔒 Encrypted! Opening share sheet…</p>
+		<p class="text-sm text-gray-500 dark:text-gray-400">Opening share sheet…</p>
 	</div>
 {:else if state === 'ios-instructions'}
 	<div class="space-y-4">
@@ -196,7 +189,7 @@ Want to send me an encrypted file back using the same passphrase? → https://ce
 		<div class="space-y-1.5 rounded-lg border border-green-300 bg-green-50 dark:border-green-900/50 dark:bg-green-950/30 px-3 py-2.5">
 			<p class="text-sm font-medium text-gray-900 dark:text-gray-100">✅ File shared!</p>
 			<p class="text-xs text-gray-700 dark:text-gray-300">
-				Send your passcode to the recipient now — don't include it in the same message as the file.
+				This file is not encrypted — anyone with it can open it.
 			</p>
 		</div>
 		<div class="flex justify-end">
@@ -204,7 +197,7 @@ Want to send me an encrypted file back using the same passphrase? → https://ce
 				onclick={onDone}
 				class="text-xs font-medium text-blue-700 transition-colors hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
 			>
-				Encrypt another file →
+				Share another file →
 			</button>
 		</div>
 	</div>

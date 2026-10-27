@@ -4,9 +4,6 @@
 
 	import FileDropzone from '$lib/components/ui/FileDropzone.svelte';
 	import ImportModal from '$lib/components/ImportModal.svelte';
-	import SecureSaveModal from '$lib/components/SecureSaveModal.svelte';
-	import SecureOpenModal from '$lib/components/SecureOpenModal.svelte';
-	import { isVaultCandidate, VAULT_IMPORT_STREAM_THRESHOLD_BYTES } from '$lib/crypto/vault-constants.js';
 
 	import LoadingSpinner from '$lib/components/ui/LoadingSpinner.svelte';
 	import ErrorBanner from '$lib/components/ui/ErrorBanner.svelte';
@@ -512,48 +509,6 @@
 		showImport = true;
 	}
 
-	// ============================================================
-	// "Vault" flows — encrypt an unsupported file to disk, or decrypt an
-	// oversized .cesvu straight to disk (see vault-constants.ts / vault-io.ts).
-	// Mirrors the .cesvu import wiring above: state here, PULL consumption of
-	// the workspace-level drop signals below, and the two modals mounted near
-	// ImportModal's markup.
-	// ============================================================
-	let showSecureSave = $state(false);
-	let secureSaveFile = $state<File | null>(null);
-	let showSecureOpen = $state(false);
-	let secureOpenFile = $state<File | null>(null);
-
-	function openSecureSaveFor(file: File) {
-		secureSaveFile = file;
-		showSecureSave = true;
-	}
-	function openSecureOpenFor(file: File) {
-		secureOpenFile = file;
-		showSecureOpen = true;
-	}
-
-	// Consume a vault-encrypt request handed in by the workspace-level
-	// drag-and-drop zone (Workspace.svelte) — same PULL pattern as
-	// pendingImportFile above.
-	$effect(() => {
-		const pending = workspace.pendingVaultEncryptFile;
-		if (pending) {
-			openSecureSaveFor(pending);
-			workspace.clearVaultEncrypt();
-		}
-	});
-
-	// Consume a vault-decrypt request (an oversized .cesvu dropped on the shell).
-	$effect(() => {
-		const pending = workspace.pendingVaultDecryptFile;
-		if (pending) {
-			openSecureOpenFor(pending);
-			workspace.clearVaultDecrypt();
-		}
-	});
-
-
 	function onImportPicked(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const f = input.files?.[0];
@@ -819,27 +774,9 @@
 	async function handleFileSelected(file: File) {
 
 		// A .cesvu file is an exported document, not a source file to parse —
-		// route it into the unlock flow instead of the normal parser pipeline.
-		// Oversized ones (over VAULT_IMPORT_STREAM_THRESHOLD_BYTES) skip the
-		// in-memory unlock + viewer entirely and go to the "decrypt straight to
-		// disk" flow instead (see vault-io.ts's importVaultFileToDisk) — loading
-		// a huge decrypted payload into memory just to render it would defeat
-		// the whole point of streaming encryption.
+		// route it into the open flow instead of the normal parser pipeline.
 		if (file.name.toLowerCase().endsWith('.cesvu')) {
-			if (file.size > VAULT_IMPORT_STREAM_THRESHOLD_BYTES) {
-				openSecureOpenFor(file);
-			} else {
-				openImportFor(file);
-			}
-			return;
-		}
-
-		// A file whose type the in-app viewer doesn't support (see
-		// vault-constants.ts's isVaultCandidate) isn't parseable at all — offer
-		// to encrypt it straight to disk with a fresh passphrase instead of
-		// falling through to parseFile() (which would just throw).
-		if (isVaultCandidate(file)) {
-			openSecureSaveFor(file);
+			openImportFor(file);
 			return;
 		}
 
@@ -3023,22 +2960,6 @@
 		file={importFile}
 		onclose={() => { showImport = false; importFile = null; }}
 		onimported={handleImported}
-	/>
-{/if}
-
-<!-- Encrypt an unsupported file straight to disk ("vault" save) -->
-{#if showSecureSave && secureSaveFile}
-	<SecureSaveModal
-		file={secureSaveFile}
-		onclose={() => { showSecureSave = false; secureSaveFile = null; }}
-	/>
-{/if}
-
-<!-- Decrypt an oversized .cesvu straight to disk ("vault" open) -->
-{#if showSecureOpen && secureOpenFile}
-	<SecureOpenModal
-		file={secureOpenFile}
-		onclose={() => { showSecureOpen = false; secureOpenFile = null; }}
 	/>
 {/if}
 

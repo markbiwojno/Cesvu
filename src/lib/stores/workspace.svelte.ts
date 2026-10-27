@@ -26,7 +26,6 @@ import {
 
 import { clauseStore } from '$lib/stores/clauseStore.svelte.js';
 import { notesStore } from '$lib/stores/notesStore.svelte.js';
-import { sessionKeyStore } from '$lib/stores/sessionKey.svelte.js';
 
 import type { SourceType, SplitMode, DocumentSplits } from '$lib/schema.js';
 export type { SplitMode };
@@ -183,50 +182,6 @@ let chatPrefill = $state<{ text: string; skipQueryEngine: boolean } | null>(null
  * doesn't own the import UI.
  */
 let pendingImportFile = $state<File | null>(null);
-
-/**
- * One-shot "vault" requests (PULL pattern, same shape as pendingImportFile):
- *   - pendingVaultEncryptFile: a dropped file whose type the in-app viewer
- *     doesn't support (see crypto/vault-constants.ts's isVaultCandidate).
- *     DocumentPane opens SecureSaveModal to encrypt it straight to disk.
- *   - pendingVaultDecryptFile: a dropped .cesvu file OVER
- *     VAULT_IMPORT_STREAM_THRESHOLD_BYTES. DocumentPane opens SecureOpenModal
- *     to decrypt it straight to disk instead of the normal in-memory unlock +
- *     viewer flow.
- * Both are set by the workspace-level drag-and-drop zone (Workspace.svelte)
- * and consumed (+cleared) by DocumentPane, mirroring pendingImportFile.
- */
-let pendingVaultEncryptFile = $state<File | null>(null);
-let pendingVaultDecryptFile = $state<File | null>(null);
-
-/**
- * True while ANY export/vault modal (ExportModal, SecureSaveModal,
- * SecureOpenModal) is actively streaming/encrypting/decrypting — i.e. its
- * own `phase` is in the "generating"/"unlocking" state where the Modal
- * component's `dismissible` prop is also false (see Modal.svelte's doc
- * comment). Closing the tab/refreshing mid-operation would silently
- * abandon a partial write with no way to resume it, so
- * `onBeforeUnload` (Workspace.svelte) checks this flag to warn the user —
- * on top of the in-modal backdrop/Escape/✕ guards, which only protect
- * against accidental in-page dismissal, not a full navigation/reload.
- * A simple counter (not a boolean) so nested/overlapping calls from
- * multiple modals can never clobber each other's "done" transition.
- */
-let activeVaultOperations = $state(0);
-
-/** Called by an export/vault modal when it enters its non-dismissible
- *  "actively writing" phase. Must be paired with a later
- *  `endVaultOperation()` call (e.g. in a try/finally). */
-function beginVaultOperation() {
-	activeVaultOperations += 1;
-}
-
-/** Pair for `beginVaultOperation()`. Clamped at 0 so a stray extra call
- *  (e.g. from a retry path) can't underflow into a negative count. */
-function endVaultOperation() {
-	activeVaultOperations = Math.max(0, activeVaultOperations - 1);
-}
-
 
 
 
@@ -692,34 +647,6 @@ function clearImport() {
 	pendingImportFile = null;
 }
 
-/**
- * Queue a non-viewer-supported file for the "encrypt to vault" flow. Set by
- * the workspace-level drag-and-drop zone (and the landing FileDropzone);
- * consumed (and cleared) by DocumentPane, which owns SecureSaveModal.
- */
-function requestVaultEncrypt(f: File) {
-	pendingVaultEncryptFile = f;
-}
-
-/** Clear the pending vault-encrypt file. Called by DocumentPane after consuming it. */
-function clearVaultEncrypt() {
-	pendingVaultEncryptFile = null;
-}
-
-/**
- * Queue an oversized .cesvu file for the "decrypt straight to disk" flow.
- * Set by the workspace-level drag-and-drop zone; consumed (and cleared) by
- * DocumentPane, which owns SecureOpenModal.
- */
-function requestVaultDecrypt(f: File) {
-	pendingVaultDecryptFile = f;
-}
-
-/** Clear the pending vault-decrypt file. Called by DocumentPane after consuming it. */
-function clearVaultDecrypt() {
-	pendingVaultDecryptFile = null;
-}
-
 
 
 /**
@@ -980,11 +907,7 @@ function setSourceOmitted(v: boolean) {
  */
 const perDocumentTeardowns: Array<() => void> = [
 	() => clauseStore.unbind(),
-	() => notesStore.clear(),
-	// The "Send Back" passphrase (see sessionKey.svelte.ts) is far more
-	// sensitive than the document body — it MUST be zeroized/dropped the
-	// instant the document closes, exactly like clauseStore/notesStore.
-	() => sessionKeyStore.clear()
+	() => notesStore.clear()
 ];
 
 /**
@@ -1103,10 +1026,6 @@ export const workspace = {
 	get activeSort() { return activeSort; },
 	get chatPrefill() { return chatPrefill; },
 	get pendingImportFile() { return pendingImportFile; },
-	get pendingVaultEncryptFile() { return pendingVaultEncryptFile; },
-	get pendingVaultDecryptFile() { return pendingVaultDecryptFile; },
-	get activeVaultOperations() { return activeVaultOperations; },
-	get hasActiveVaultOperation() { return activeVaultOperations > 0; },
 
 	get toast() { return toast; },
 
@@ -1197,12 +1116,6 @@ export const workspace = {
 	clearChatPrefill,
 	requestImport,
 	clearImport,
-	requestVaultEncrypt,
-	clearVaultEncrypt,
-	requestVaultDecrypt,
-	clearVaultDecrypt,
-	beginVaultOperation,
-	endVaultOperation,
 	showToast,
 
 

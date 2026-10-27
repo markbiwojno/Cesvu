@@ -5,11 +5,10 @@
 		/**
 		 * Types that open directly in the in-app viewer. This is NOT a hard
 		 * accept filter — every file type is still accepted by drag/drop or
-		 * browse. Anything outside this list is routed to the encrypt/vault
-		 * flow (see SecureSaveModal.svelte) instead of being rejected. Do not
-		 * wire this into the native `<input accept>` as an enforced
-		 * restriction beyond a UI hint, or the "any file can be secured" flow
-		 * will silently break.
+		 * browse (a file outside this list is simply unsupported, see
+		 * handleFileSelected's own error path). Do not wire this into the
+		 * native `<input accept>` as an enforced restriction beyond a UI
+		 * hint.
 		 */
 		acceptedTypes?: string[];
 		onFileSelected: (file: File) => void;
@@ -40,11 +39,9 @@
 	// so wiring it in there was silently harmless. iOS Safari's document
 	// picker, however, ENFORCES `accept` as a hard filter with no such
 	// override in most versions — a narrow extension list there made
-	// every file outside it simply unselectable, silently breaking the
-	// "any file of any size can be encrypted & secured" flow advertised
-	// right below the dropzone. Leaving `accept` unset shows every file
-	// type on every platform, matching drag-and-drop's behavior (which
-	// was never restricted).
+	// every file outside it simply unselectable. Leaving `accept` unset
+	// shows every file type on every platform, matching drag-and-drop's
+	// behavior (which was never restricted).
 
 
 	// MIME type labels for display
@@ -72,12 +69,10 @@
 		isDragOver = false;
 		if (disabled) return;
 		// A dropped FOLDER hands back a synthetic zero-byte File (see
-		// drag-drop.ts's doc comment) that would otherwise sail through as
-		// an "unsupported type" and get "encrypted" into a blank, useless
-		// .cesvu file. Reject it here with an inline message instead of
-		// ever reaching onFileSelected.
+		// drag-drop.ts's doc comment). Reject it here with an inline
+		// message instead of ever reaching onFileSelected.
 		if (dropContainsDirectory(e)) {
-			dropError = "Folders can't be uploaded or encrypted — drop an individual file instead.";
+			dropError = "Folders can't be uploaded — drop an individual file instead.";
 			return;
 		}
 		dropError = '';
@@ -139,9 +134,6 @@
 		{:else}
 			<p class="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
 				Drop a file here, or <span class="text-blue-600 dark:text-blue-400 underline underline-offset-2">browse</span>
-			</p>
-			<p class="text-xs text-gray-500">
-				🔒 Any file of any size can be encrypted &amp; secured
 			</p>
 			<p class="text-xs text-gray-400 dark:text-gray-600">
 				Opens in viewer: {acceptedTypes.map((t) => typeLabels[t.replace('.', '')] ?? t.toUpperCase()).join(', ')}
