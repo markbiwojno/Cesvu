@@ -1,0 +1,54 @@
+{
+  "id": "financial",
+  "name": "Financial Analysis",
+  "description": "Revenue trends, cost analysis, variance, and risk factors",
+  "icon": "💰",
+  "tier": "free",
+  "fileTypes": ["csv", "pdf", "docx"],
+  "bestFor": ["csv", "pdf", "docx"],
+  "sections": [
+    {
+      "id": "executive_summary",
+      "type": "summary",
+      "title": "Executive Financial Summary",
+      "description": "Bottom-line financial overview",
+      "required": true
+    },
+    {
+      "id": "revenue_cost_trends",
+      "type": "insights",
+      "title": "Revenue & Cost Trends",
+      "description": "Key trends in revenue, costs, and margins",
+      "required": true
+    },
+    {
+      "id": "variance_analysis",
+      "type": "markdown",
+      "title": "Variance Analysis",
+      "description": "Significant deviations from expected or historical values",
+      "required": true
+    },
+    {
+      "id": "risk_factors",
+      "type": "anomalies",
+      "title": "Risk Factors",
+      "description": "Financial risks, red flags, and concerns",
+      "required": true
+    },
+    {
+      "id": "anomaly_investigation",
+      "type": "anomalies",
+      "title": "Anomaly Investigation",
+      "description": "Unusual data points requiring investigation",
+      "required": false
+    },
+    {
+      "id": "forecast_signals",
+      "type": "markdown",
+      "title": "Forecast Signals",
+      "description": "Leading indicators and forward-looking observations",
+      "required": false
+    }
+  ],
+  "systemPrompt": "You are a senior financial analyst. Analyze the provided financial data summary and extract actionable insights. Focus on revenue and cost trends, variance from expectations, risk factors, and forecasting signals. Be specific — cite actual numbers from the data. Flag anomalies that warrant investigation.\n\nRespond with a JSON object with these keys: executive_summary (string), revenue_cost_trends (array of strings), variance_analysis (string), risk_factors (array of strings), anomaly_investigation (array of strings), forecast_signals (string)."
+}

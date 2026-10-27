@@ -1,0 +1,16 @@
+{
+  "name": "@cesvu/crypto-example",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Zero-dependency Node.js demo app for @cesvu/crypto — encrypt/decrypt .cesvu files in-memory or streaming, with diceware/emoji/raw passphrases, via a single-page UI mirroring the cesvu.com web app's SecureSaveModal/SecureOpenModal UX.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@cesvu/crypto": "file:.."
+  }
+}

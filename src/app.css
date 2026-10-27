@@ -1,0 +1,68 @@
+@import 'tailwindcss';
+@plugin '@tailwindcss/typography';
+
+/* Tailwind v4 no longer auto-loads tailwind.config.ts (its darkMode:'class'
+   setting is otherwise silently ignored — JS configs require an explicit
+   @config directive in v4, and we don't use one). Without this line, the
+   `dark:` variant falls back to Tailwind's v4 default of `prefers-color-scheme`,
+   which ignores the `.dark` class mode-watcher toggles on <html> entirely —
+   this is why toggling the in-app switch only changed things wired with
+   plain JS (like the logo swap) and left every `dark:`-class-driven surface
+   (the whole main workspace) tracking the OS theme instead. This restores
+   class-based dark mode so `dark:*` utilities follow the `.dark` class. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+	--font-sans: 'Inter', system-ui, sans-serif;
+	--font-mono: 'JetBrains Mono', 'Fira Code', monospace;
+
+	/* Light-mode base canvas color (bg-surface). Used for the root/base panes
+	   (workspace shell, header, document/chat/dashboard panels) so the light
+	   theme has a soft off-white canvas instead of pure white — mirroring how
+	   dark mode uses slate-950 as its base tone. Elevated surfaces (modals,
+	   dropdown popovers, table header rows, badges) intentionally stay
+	   bg-white so they still visually "lift" off this base, same as dark mode
+	   keeps slate-900/800 distinct from the slate-950 base. */
+	--color-surface: #fafafa;
+
+	--color-brand-50: #f0f9ff;
+	--color-brand-100: #e0f2fe;
+	--color-brand-200: #bae6fd;
+	--color-brand-300: #7dd3fc;
+	--color-brand-400: #38bdf8;
+	--color-brand-500: #0ea5e9;
+	--color-brand-600: #0284c7;
+	--color-brand-700: #0369a1;
+	--color-brand-800: #075985;
+	--color-brand-900: #0c4a6e;
+	--color-brand-950: #082f49;
+}
+
+/* Scrollbar styling — dark by default, light override below */
+::-webkit-scrollbar {
+	width: 6px;
+	height: 6px;
+}
+::-webkit-scrollbar-track {
+	background: transparent;
+}
+::-webkit-scrollbar-thumb {
+	background: #374151;
+	border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+	background: #4b5563;
+}
+
+:root:not(.dark) ::-webkit-scrollbar-thumb {
+	background: #cbd5e1;
+}
+:root:not(.dark) ::-webkit-scrollbar-thumb:hover {
+	background: #94a3b8;
+}
+
+/* Selection */
+::selection {
+	background: rgba(14, 165, 233, 0.3);
+	color: inherit;
+}

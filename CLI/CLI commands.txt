@@ -1,0 +1,53 @@
+certutil -hashfile "File.txt" SHA256
+
+
+
+Encrypt:
+encrypt -w "File.txt"
+
+(Output File.txt.cesvu)
+Diceware Passphrase: (6 words diceware)
+
+encrypt -e "File.txt"
+
+(Output File.txt.cesvu)
+Emoji Passphrase: (8 emojis)
+
+encrypt "File.txt" -p "password123"
+(Output File.txt.cesvu)
+
+
+Decrypt:
+decrypt "File.txt.cesvu" -p "password123"
+
+(Output File.txt)
+
+
+
+AI recommendations:
+
+# === Encrypt ===
+
+# With a passphrase you type (interactive prompt)
+cesvu -e "File.txt"
+Passphrase: ********
+
+# With a generated diceware passphrase (auto-saved to File.txt.passphrase)
+cesvu -e "File.txt" --diceware
+
+# With a generated emoji passphrase (auto-saved to File.txt.passphrase)
+cesvu -e "File.txt" --emoji
+
+# === Decrypt ===
+
+# Interactive prompt
+cesvu -d "File.txt.cesvu"
+Passphrase: ********
+
+# Using the saved passphrase file
+cesvu -d "File.txt.cesvu" < File.txt.passphrase
+
+
+
+
+

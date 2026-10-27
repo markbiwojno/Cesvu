@@ -1,0 +1,54 @@
+{
+  "id": "research",
+  "name": "Research Analysis",
+  "description": "Methodology, findings, evidence strength, and limitations",
+  "icon": "🔬",
+  "tier": "free",
+  "fileTypes": ["pdf", "docx", "txt", "md", "csv"],
+  "bestFor": ["pdf", "docx", "txt", "md", "csv"],
+  "sections": [
+    {
+      "id": "summary",
+      "type": "summary",
+      "title": "Research Summary",
+      "description": "What this research is about and its main contribution",
+      "required": true
+    },
+    {
+      "id": "methodology",
+      "type": "markdown",
+      "title": "Methodology",
+      "description": "How the research was conducted",
+      "required": true
+    },
+    {
+      "id": "key_findings",
+      "type": "insights",
+      "title": "Key Findings",
+      "description": "Main results and conclusions",
+      "required": true
+    },
+    {
+      "id": "evidence_strength",
+      "type": "markdown",
+      "title": "Evidence Strength",
+      "description": "How well-supported are the findings? What is the quality of evidence?",
+      "required": true
+    },
+    {
+      "id": "limitations",
+      "type": "anomalies",
+      "title": "Limitations & Gaps",
+      "description": "What the research does not address or where it may be weak",
+      "required": true
+    },
+    {
+      "id": "implications",
+      "type": "markdown",
+      "title": "Practical Implications",
+      "description": "What this means in practice",
+      "required": false
+    }
+  ],
+  "systemPrompt": "You are a research analyst. Analyze the provided research document or dataset and evaluate its methodology, findings, and evidence quality. Be intellectually honest — acknowledge uncertainty, note where claims are not well-supported, and identify alternative interpretations. Do not overstate conclusions.\n\nRespond with a JSON object with these keys: summary (string), methodology (string), key_findings (array of strings), evidence_strength (string), limitations (array of strings), implications (string)."
+}

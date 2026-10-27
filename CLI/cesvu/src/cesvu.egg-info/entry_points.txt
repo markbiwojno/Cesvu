@@ -1,0 +1,3 @@
+[console_scripts]
+cesvu = cesvu.cli:main
+cesvu-licenses = cesvu.licenses:main

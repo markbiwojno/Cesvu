@@ -1,0 +1,54 @@
+{
+  "id": "legal",
+  "name": "Legal Analysis",
+  "description": "Parties, obligations, risks, and unusual clauses",
+  "icon": "⚖️",
+  "tier": "free",
+  "fileTypes": ["pdf", "docx", "txt"],
+  "bestFor": ["pdf", "docx", "txt"],
+  "sections": [
+    {
+      "id": "summary",
+      "type": "summary",
+      "title": "Document Summary",
+      "description": "Type of document, parties involved, and purpose",
+      "required": true
+    },
+    {
+      "id": "parties_dates",
+      "type": "insights",
+      "title": "Parties & Key Dates",
+      "description": "Named parties, effective dates, deadlines, and terms",
+      "required": true
+    },
+    {
+      "id": "obligations",
+      "type": "insights",
+      "title": "Key Obligations",
+      "description": "What each party is required to do",
+      "required": true
+    },
+    {
+      "id": "financial_terms",
+      "type": "markdown",
+      "title": "Financial Terms",
+      "description": "Payment amounts, schedules, penalties, and financial obligations",
+      "required": false
+    },
+    {
+      "id": "risk_flags",
+      "type": "anomalies",
+      "title": "Risk Flags",
+      "description": "Unusual clauses, one-sided terms, liability concerns (LOW/MEDIUM/HIGH/CRITICAL)",
+      "required": true
+    },
+    {
+      "id": "missing_provisions",
+      "type": "markdown",
+      "title": "Missing Provisions",
+      "description": "Standard clauses that appear to be absent",
+      "required": false
+    }
+  ],
+  "systemPrompt": "You are a legal document analyst. Analyze the provided document and identify parties, obligations, financial terms, risk factors, and unusual or missing clauses. Assign severity ratings (LOW/MEDIUM/HIGH/CRITICAL) to risk flags. Be precise — quote specific language where relevant.\n\nDISCLAIMER: This analysis is for informational purposes only and does not constitute legal advice. Consult a qualified attorney for legal guidance.\n\nRespond with a JSON object with these keys: summary (string), parties_dates (array of strings), obligations (array of strings), financial_terms (string), risk_flags (array of strings with severity prefix e.g. '[HIGH] Unlimited liability clause'), missing_provisions (string)."
+}

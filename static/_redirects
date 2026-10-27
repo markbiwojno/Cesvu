@@ -1,0 +1,12 @@
+# Cloudflare Pages redirects for app.cesvu.com
+#
+# Reference: https://developers.cloudflare.com/pages/configuration/redirects/
+#
+# SvelteKit's static adapter emits a fully-prerendered set of HTML files
+# (one per route) under dist/, so this file is intentionally minimal. The
+# force-HTTPS row is the only critical one — Cloudflare already issues TLS
+# and HTTP/3 at the edge, but this guarantees any HTTP request bounces to
+# HTTPS even before the HSTS preload kicks in.
+
+# Force HTTPS for every request.
+http://app.cesvu.com/*    https://app.cesvu.com/:splat    301!

@@ -1,0 +1,635 @@
+{
+  "version": "1.0",
+  "description": "Green-flag legal terms for Cesvu contract analysis, from the perspective of a Hiring Manager or Investor. Each term is the mirror of the same term in red-flags.json: what is a red flag for an employee/founder is a green flag for a hiring manager/investor. Terms with isGreenFlag: true carry a benefitNote (why the term favors the drafter) and negotiation scripts for keeping or pushing for the term.",
+  "terms": [
+    {
+      "term": "non-compete clause",
+      "aliases": [
+        "non-compete",
+        "noncompete",
+        "covenant not to compete",
+        "restrictive covenant"
+      ],
+      "definition": "Prevents you from working for competitors or starting a competing business for a set time after leaving.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Protects the company by keeping a departing employee from taking know-how, clients, or trade secrets straight to a competitor. Enforceable in most states (note CA, ND, OK exceptions); even where weak, it deters poaching.",
+      "negotiationScript": "We'd like to keep a reasonable non-compete to protect our client relationships and confidential know-how.",
+      "scriptLong": "A focused non-compete protects the legitimate interests we're investing in — client relationships, trade secrets, and team stability. We'd like to keep a reasonable term and scope tied to the role and the markets where the employee actually operates, with clear, enforceable language under the governing state's law."
+    },
+    {
+      "term": "intellectual property assignment",
+      "aliases": [
+        "IP assignment",
+        "assignment of inventions",
+        "work for hire",
+        "proprietary rights"
+      ],
+      "definition": "Anything you create as part of your job — code, designs, inventions — belongs to the employer.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Ensures the company owns everything created on the job — code, designs, inventions. Critical for clean cap-table diligence and future fundraising or acquisition.",
+      "negotiationScript": "We'd like a full present assignment of work-related IP so ownership is unambiguous for diligence.",
+      "scriptLong": "Clean IP ownership is essential for fundraising and acquisition diligence. We'd like a present assignment of all work created within the scope of employment, a disclosure obligation for prior inventions, and a power-of-attorney backstop so the company can perfect title — keeping any statutory carve-outs (e.g. § 2870) narrow and well-documented."
+    },
+    {
+      "term": "arbitration clause",
+      "aliases": [
+        "arbitration",
+        "binding arbitration",
+        "arbitration agreement",
+        "mandatory arbitration"
+      ],
+      "definition": "Requires disputes to be resolved by a private arbitrator instead of in court.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Keeps disputes private, faster, and cheaper than court, with no jury and no public record. Pairs well with a class action waiver to limit aggregate exposure.",
+      "negotiationScript": "We'd like to keep binding arbitration to resolve disputes efficiently and confidentially.",
+      "scriptLong": "Arbitration keeps employment disputes confidential, faster, and far less expensive than litigation, with no jury risk or public record. We'd like to keep the clause, ideally with a streamlined single-arbitrator process under established rules and confidentiality of the proceedings."
+    },
+    {
+      "term": "class action waiver",
+      "aliases": [
+        "class action",
+        "waiver of class action",
+        "class action waiver"
+      ],
+      "definition": "You agree not to join a class action lawsuit against the employer.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Limits exposure to one-off individual claims instead of aggregated class liability — the single biggest lever for capping litigation risk across a workforce.",
+      "negotiationScript": "We'd like to retain the class action waiver so disputes are handled individually.",
+      "scriptLong": "An individual-claims requirement keeps litigation exposure proportionate and predictable, avoiding aggregated class liability over standardized terms. We'd like to keep the class and collective action waiver, paired with arbitration, consistent with current enforceability under the FAA."
+    },
+    {
+      "term": "indemnity",
+      "aliases": [
+        "indemnification",
+        "indemnify",
+        "hold harmless"
+      ],
+      "definition": "You agree to cover the employer's losses if you cause damage.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Shifts the cost of an employee’s mistakes, misconduct, or IP problems back onto them, protecting the company and its investors from downstream losses.",
+      "negotiationScript": "We'd like the employee to indemnify the company for losses caused by their breach or misconduct.",
+      "scriptLong": "An indemnification obligation appropriately allocates risk to the party who caused the loss. We'd like the employee to indemnify the company for damages arising from their breach, willful misconduct, or unauthorized use of third-party IP, so the company and its investors aren't absorbing costs they didn't create."
+    },
+    {
+      "term": "moonlighting clause",
+      "aliases": [
+        "moonlighting",
+        "outside employment",
+        "exclusive employment",
+        "outside business activities"
+      ],
+      "definition": "Restricts you from working other jobs or side projects while employed.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Keeps the employee’s focus, time, and best ideas inside the company and prevents side projects that could compete or leak IP.",
+      "negotiationScript": "We'd like an exclusivity/outside-activities clause so the role stays the employee's primary focus.",
+      "scriptLong": "We're investing in this person's full attention, so we'd like an outside-activities clause requiring prior written consent for other work, with a clear bar on anything that competes with, draws on, or could leak the company's IP or confidential information."
+    },
+    {
+      "term": "relocation clause",
+      "aliases": [
+        "relocation",
+        "transfer clause",
+        "mobility clause"
+      ],
+      "definition": "Employer can require you to move to a different location.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Gives the company flexibility to deploy talent where it’s needed as the business grows or consolidates offices.",
+      "negotiationScript": "We'd like to retain the right to relocate the role as business needs change.",
+      "scriptLong": "As the business scales we may need to consolidate teams or open new locations, so we'd like to keep a relocation provision that lets the company reassign the role's primary work location with reasonable notice, preserving operational flexibility."
+    },
+    {
+      "term": "termination for cause",
+      "aliases": [
+        "for cause",
+        "termination with cause",
+        "gross misconduct"
+      ],
+      "definition": "Defines grounds for immediate termination without severance or notice.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Lets the company exit a poor performer or bad actor immediately, without severance or notice — controlling cost and risk.",
+      "negotiationScript": "We'd like a broad, flexible 'cause' definition so we can act quickly on performance or conduct issues.",
+      "scriptLong": "We'd like the for-cause provision to give the company practical flexibility to terminate promptly for performance shortfalls, policy violations, or conduct issues — without a drawn-out cure process — so we can protect the team and the business and avoid paying severance where it isn't warranted."
+    },
+    {
+      "term": "other duties as assigned",
+      "aliases": [
+        "other duties",
+        "duties as assigned",
+        "additional responsibilities"
+      ],
+      "definition": "Your role includes unspecified tasks beyond your job description.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Lets the company flex the role as priorities shift without renegotiating the contract — essential in a fast-moving startup.",
+      "negotiationScript": "We'd like to keep 'other duties as assigned' so the role can flex with the company's needs.",
+      "scriptLong": "In an early-stage company priorities change quickly. We'd like to keep open-ended 'other duties as assigned' language so we can adapt the role to the business without renegotiating, while keeping the employee productive across whatever the company needs most."
+    },
+    {
+      "term": "discretionary bonus",
+      "aliases": [
+        "discretionary",
+        "bonus at discretion",
+        "sole discretion"
+      ],
+      "definition": "Bonus payments are at the employer's complete discretion, not guaranteed.",
+      "category": "employment",
+      "isGreenFlag": true,
+      "benefitNote": "Keeps variable compensation fully within the company’s control — no guaranteed payout, preserving cash and aligning rewards with company performance.",
+      "negotiationScript": "We'd like to keep the bonus fully discretionary so payouts track company performance and cash position.",
+      "scriptLong": "We'd like to keep the bonus discretionary so the company retains full control over whether and how much to pay based on company performance, runway, and individual contribution — preserving cash flexibility rather than committing to a guaranteed, formula-driven payout."
+    },
+    {
+      "term": "release of claims",
+      "aliases": [
+        "release",
+        "general release",
+        "waiver of claims",
+        "release of all claims"
+      ],
+      "definition": "You agree not to sue the employer in exchange for severance pay.",
+      "category": "severance",
+      "isGreenFlag": true,
+      "benefitNote": "Buys the company a clean break — in exchange for severance, the departing employee gives up the right to sue. The broader the release, the lower the residual risk.",
+      "negotiationScript": "We'd like a broad general release in exchange for the severance so we get finality.",
+      "scriptLong": "The value of severance to the company is finality, so we'd like a broad general release of all claims (to the fullest extent permitted by law) in exchange for the payment, with standard ADEA mechanics where applicable, so we close out residual litigation risk cleanly."
+    },
+    {
+      "term": "non-disparagement clause",
+      "aliases": [
+        "non-disparagement",
+        "disparagement",
+        "non-disparage"
+      ],
+      "definition": "You cannot make negative statements about the company or its leadership.",
+      "category": "severance",
+      "isGreenFlag": true,
+      "benefitNote": "Protects the company’s reputation and employer brand by keeping a departing employee from publicly criticizing it.",
+      "negotiationScript": "We'd like a non-disparagement clause to protect the company's reputation post-departure.",
+      "scriptLong": "We'd like the departing employee to agree not to disparage the company, its products, or its leadership, protecting our employer brand and recruiting, with carve-outs only for legally protected disclosures so the clause stays enforceable."
+    },
+    {
+      "term": "non-compete",
+      "aliases": [
+        "non-compete",
+        "noncompete",
+        "covenant not to compete"
+      ],
+      "definition": "Restricts future employment with competitors after leaving.",
+      "category": "severance",
+      "isGreenFlag": true,
+      "benefitNote": "Even at exit, keeps a departing employee from immediately joining or starting a competitor with fresh inside knowledge.",
+      "negotiationScript": "We'd like a post-departure non-compete to protect against immediate competitive harm.",
+      "scriptLong": "Because the employee leaves with current knowledge of our roadmap and customers, we'd like a reasonable post-departure non-compete tied to direct competitors and the markets they worked in, drafted to be enforceable under the governing state's law."
+    },
+    {
+      "term": "ADEA waiver",
+      "aliases": [
+        "ADEA",
+        "age discrimination waiver",
+        "Older Workers Benefit Protection Act"
+      ],
+      "definition": "Special protections for workers 40+: 21-day review period, 7-day revocation right, plain language requirement.",
+      "category": "severance",
+      "isGreenFlag": true,
+      "benefitNote": "Properly executed, makes an age-discrimination release stick — giving the company enforceable finality with workers 40+.",
+      "negotiationScript": "We'd like to include the full OWBPA mechanics so the age-claim release is enforceable.",
+      "scriptLong": "To make the release enforceable for employees over 40, we'd like to follow the OWBPA carefully — the consideration period, revocation window, and plain-language disclosures — so the age-discrimination waiver holds up and the company gets the finality it's paying for."
+    },
+    {
+      "term": "confidentiality of agreement",
+      "aliases": [
+        "confidentiality",
+        "non-disclosure of terms",
+        "secrecy clause"
+      ],
+      "definition": "You cannot reveal the terms of the severance deal or the negotiation.",
+      "category": "severance",
+      "isGreenFlag": true,
+      "benefitNote": "Stops the severance terms from setting a precedent or anchoring negotiations with other departing employees.",
+      "negotiationScript": "We'd like the settlement terms kept confidential so they don't set a precedent.",
+      "scriptLong": "We'd like the financial terms of this agreement kept confidential (with the usual carve-outs for spouse, counsel, and tax advisor) so individual arrangements don't become a benchmark that drives up the cost of future departures."
+    },
+    {
+      "term": "full ratchet",
+      "aliases": [
+        "ratchet",
+        "full ratchet anti-dilution",
+        "ratchet anti-dilution"
+      ],
+      "definition": "If the company issues shares at a lower price in the future, earlier investors get more shares to compensate — as if they invested at the lower price.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Maximally protects the investor against dilution — in a down round, their effective price resets all the way to the new, lower price.",
+      "negotiationScript": "We'd like full-ratchet anti-dilution to protect our entry price against a down round.",
+      "scriptLong": "To protect the price we're paying, we'd like full-ratchet anti-dilution so that if the company raises at a lower price later, our conversion price resets accordingly. It's the strongest downside protection on valuation and reflects the risk we're taking at this stage."
+    },
+    {
+      "term": "participating preferred",
+      "aliases": [
+        "participating",
+        "participating preferred stock",
+        "double dip"
+      ],
+      "definition": "Investors get their liquidation preference AND share in remaining proceeds with common shareholders.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Lets the investor double-dip: take their preference off the top AND share pro-rata in the remainder — maximizing return across exit scenarios.",
+      "negotiationScript": "We'd like participating preferred so we recover our investment and share in the upside.",
+      "scriptLong": "We'd like participating preferred stock so that on an exit we first recover our invested capital via the liquidation preference and then participate alongside common in the remaining proceeds — giving us strong protection in modest exits and continued upside in large ones."
+    },
+    {
+      "term": "liquidation preference",
+      "aliases": [
+        "liquidation pref",
+        "liquidation preference",
+        "pref",
+        "preference"
+      ],
+      "definition": "Who gets paid first and how much if the company is sold. Usually expressed as a multiple (1x, 2x, 3x).",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Guarantees the investor gets paid first on an exit — and at a multiple above 1x, several times their money before founders see anything.",
+      "negotiationScript": "We'd like a liquidation preference that ensures we're made whole (or better) before common.",
+      "scriptLong": "We'd like a liquidation preference so our capital is returned ahead of common stock on any sale. Given the risk at this stage, we'd like to discuss a multiple above 1x where appropriate, ensuring our downside is protected even in a modest exit."
+    },
+    {
+      "term": "redemption rights",
+      "aliases": [
+        "redemption",
+        "mandatory redemption",
+        "put right"
+      ],
+      "definition": "Investors can demand the company buy back their shares after a set period.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Gives the investor an exit even if the company never sells or IPOs — they can force a buyback of their shares after a set period.",
+      "negotiationScript": "We'd like redemption rights so we have a defined path to liquidity if no exit materializes.",
+      "scriptLong": "We'd like redemption rights so that if there's no sale or IPO within a defined window, we can require the company to repurchase our shares. It gives us a backstop path to liquidity and aligns the team around delivering an exit on a reasonable timeline."
+    },
+    {
+      "term": "option pool",
+      "aliases": [
+        "option pool",
+        "employee pool",
+        "ESOP",
+        "equity pool"
+      ],
+      "definition": "Equity reserved for future employee grants. Usually 10–20% of fully diluted shares.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Sized into the pre-money, the pool dilutes founders and existing holders rather than the new investor — effectively lowering the true price paid.",
+      "negotiationScript": "We'd like the option pool sized into the pre-money to support the hiring plan.",
+      "scriptLong": "To support the hiring plan we'd like an option pool established in the pre-money capitalization, sized to fund grants through the next financing. This keeps the team's incentives funded and concentrates the associated dilution before our investment."
+    },
+    {
+      "term": "pay-to-play",
+      "aliases": [
+        "pay to play",
+        "pay-to-play provision"
+      ],
+      "definition": "Investors must participate in future rounds to keep their rights (anti-dilution, board seat, etc.).",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "For a lead investor planning to keep funding, pay-to-play punishes the investors who don’t follow on — concentrating rights with those who continue to back the company.",
+      "negotiationScript": "We'd like a pay-to-play so committed investors are rewarded and non-participants are diluted.",
+      "scriptLong": "We'd like a pay-to-play provision so investors who continue to support the company in future rounds keep their preferred rights, while those who don't follow on convert toward common. As a committed lead, this rewards our ongoing support and keeps the cap table aligned with conviction."
+    },
+    {
+      "term": "no-shop clause",
+      "aliases": [
+        "no shop",
+        "no-shop",
+        "exclusivity",
+        "exclusivity period"
+      ],
+      "definition": "You cannot solicit other investors for a set period (typically 30–60 days).",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Locks the company into exclusive negotiations, keeping the investor from being shopped against competing term sheets while they finish diligence.",
+      "negotiationScript": "We'd like an exclusivity period so we can complete diligence without competing offers.",
+      "scriptLong": "We'd like a no-shop/exclusivity period covering our diligence so the company isn't shopping our terms against other investors while we commit resources to closing. A reasonable window protects the work both sides are putting into getting the deal done."
+    },
+    {
+      "term": "material adverse change",
+      "aliases": [
+        "MAC",
+        "material adverse change",
+        "MAC clause"
+      ],
+      "definition": "Lets investors walk away if something bad happens to the company before closing.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Gives the investor an exit before closing if the company’s prospects deteriorate — protecting capital from a deal that has soured.",
+      "negotiationScript": "We'd like a MAC condition so we're not forced to close if the business materially deteriorates.",
+      "scriptLong": "We'd like a material-adverse-change condition to closing so that if something significant goes wrong between signing and funding, we aren't obligated to deploy capital into a materially different company than the one we agreed to back."
+    },
+    {
+      "term": "cumulative dividends",
+      "aliases": [
+        "cumulative",
+        "accruing dividends",
+        "dividend accrual"
+      ],
+      "definition": "Dividends that accrue over time if unpaid and get added to the liquidation preference.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Compounds the investor’s return over time — accrued dividends pile onto the liquidation preference, guaranteeing a growing minimum payout.",
+      "negotiationScript": "We'd like cumulative dividends so our return accrues steadily regardless of timing.",
+      "scriptLong": "We'd like cumulative dividends that accrue and add to our liquidation preference, giving us a compounding minimum return on capital over the hold period independent of when an exit occurs — appropriate compensation for the time value and risk of our investment."
+    },
+    {
+      "term": "founder vesting",
+      "aliases": [
+        "vesting",
+        "founder shares vesting",
+        "reverse vesting"
+      ],
+      "definition": "Founders' shares vest over time, just like employees. Standard: 4 years with 1-year cliff.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Keeps founders committed by tying their equity to continued service — if a founder leaves early, their unvested shares return to the company, protecting investors.",
+      "negotiationScript": "We'd like founder shares on a fresh vesting schedule to keep the team committed post-investment.",
+      "scriptLong": "To protect the investment and the cap table, we'd like founders' shares (including previously held stock) placed on a vesting schedule with a cliff, so that if a founder departs early their unvested equity returns to the company and stays available to incentivize the people who carry the business forward."
+    },
+    {
+      "term": "representations and warranties",
+      "aliases": [
+        "reps and warranties",
+        "representations",
+        "warranties",
+        "R&W"
+      ],
+      "definition": "Legal promises about the company's status — finances, IP ownership, litigation, compliance.",
+      "category": "startup-vc",
+      "isGreenFlag": true,
+      "benefitNote": "Puts the founders personally on the hook for the truth of what the company claims — a key diligence backstop for the investor.",
+      "negotiationScript": "We'd like robust reps and warranties, with founder backing, to stand behind the diligence.",
+      "scriptLong": "We'd like comprehensive representations and warranties about the company's finances, IP ownership, litigation, and compliance, backed by the founders, so we have meaningful recourse if a material fact turns out to be wrong after we invest."
+    },
+    {
+      "term": "joint and several liability",
+      "aliases": [
+        "joint and several",
+        "jointly and severally",
+        "joint and several liability"
+      ],
+      "definition": "Each roommate is responsible for the entire rent, not just their share.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "Lets the landlord pursue any one tenant for the entire rent — guaranteeing the full amount is collectible even if a co-tenant defaults.",
+      "negotiationScript": "We'd like joint and several liability so the full rent is recoverable from any tenant.",
+      "scriptLong": "We'd like the lease to keep joint and several liability so that each tenant is responsible for the entire rent. This guarantees the property owner can recover the full amount from any single tenant if a co-tenant stops paying or moves out."
+    },
+    {
+      "term": "holdover tenant",
+      "aliases": [
+        "holdover",
+        "holding over",
+        "holdover rent"
+      ],
+      "definition": "Staying in the unit after the lease ends without signing a renewal.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "Lets the landlord charge a steep premium (often 150–200%) when a tenant overstays — discouraging holdovers and compensating for the disruption.",
+      "negotiationScript": "We'd like a meaningful holdover premium so overstays are discouraged and compensated.",
+      "scriptLong": "We'd like to keep a holdover provision charging a premium rate (e.g. 150–200% of base rent) for any period a tenant stays past lease end without a renewal. It discourages unauthorized holdovers and compensates the owner for the disruption to re-leasing."
+    },
+    {
+      "term": "early termination clause",
+      "aliases": [
+        "early termination",
+        "lease break",
+        "break clause",
+        "buyout clause"
+      ],
+      "definition": "Conditions under which you can end the lease before the full term.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "Without one, the tenant owes rent for the full remaining term — protecting the landlord’s income if they leave early.",
+      "negotiationScript": "We'd prefer no early-termination right so the lease term's income is committed.",
+      "scriptLong": "We'd prefer to keep the tenant committed for the full term rather than granting an early-termination right, so the rental income we're underwriting is secure. If an early-exit option is needed, we'd want a substantial buyout that covers re-leasing costs and downtime."
+    },
+    {
+      "term": "automatic renewal",
+      "aliases": [
+        "auto-renewal",
+        "automatic renewal",
+        "auto-renew",
+        "evergreen clause"
+      ],
+      "definition": "The lease automatically renews for another term unless you give notice within a specific window.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "Keeps a good tenant in place and the unit occupied without re-marketing — renewal happens by default unless they affirmatively opt out.",
+      "negotiationScript": "We'd like an automatic renewal so the unit stays occupied without re-marketing.",
+      "scriptLong": "We'd like an automatic-renewal provision so a performing tenancy continues by default for another term unless the tenant gives notice within the window. It reduces vacancy and turnover costs and keeps reliable tenants in place with minimal friction."
+    },
+    {
+      "term": "pet rent",
+      "aliases": [
+        "pet rent",
+        "pet fee",
+        "monthly pet fee"
+      ],
+      "definition": "Non-refundable monthly charge for having a pet, separate from a pet deposit.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "A recurring, non-refundable charge that’s pure incremental income for the landlord, separate from any deposit covering damage.",
+      "negotiationScript": "We'd like to keep monthly pet rent as standard for units that allow pets.",
+      "scriptLong": "We'd like to keep monthly pet rent for units that permit animals. It's a standard recurring charge that compensates for the added wear and risk of allowing pets, and it sits alongside (not in place of) any refundable deposit for actual damage."
+    },
+    {
+      "term": "waiver of habitability",
+      "aliases": [
+        "habitability",
+        "warranty of habitability",
+        "waiver of warranty"
+      ],
+      "definition": "Any clause suggesting the landlord doesn't have to keep the property livable.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "(Note: the implied warranty of habitability is generally non-waivable, so this offers no real legal advantage even to a landlord.)",
+      "negotiationScript": "We recognize the warranty of habitability is non-waivable; we maintain the unit to code.",
+      "scriptLong": "Because the implied warranty of habitability can't be waived in essentially any state, we don't rely on any such language. We commit to maintaining heat, water, electricity, and a safe, livable unit, and treat habitability as a baseline obligation rather than something to contract around."
+    },
+    {
+      "term": "self-help eviction",
+      "aliases": [
+        "self-help",
+        "lockout",
+        "constructive eviction"
+      ],
+      "definition": "Landlord attempts to remove you without a court order — changing locks, shutting off utilities, removing doors.",
+      "category": "rental",
+      "isGreenFlag": true,
+      "benefitNote": "(Note: self-help eviction is illegal in all 50 states, so it carries legal risk to the landlord, not advantage.)",
+      "negotiationScript": "We follow the formal legal eviction process only; self-help is not used.",
+      "scriptLong": "Self-help eviction is illegal everywhere and exposes the owner to damages, so we don't use it. We rely solely on the formal court-ordered eviction process, which protects the owner from liability while enforcing the lease."
+    },
+    {
+      "term": "one-way indemnification",
+      "aliases": [
+        "one-way indemnity",
+        "unilateral indemnification",
+        "indemnification"
+      ],
+      "definition": "Only one party agrees to cover the other's losses — the obligation is not mutual.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Shifts all indemnity risk onto the counterparty while the drafting party bears none — maximally protective for the side it favors.",
+      "negotiationScript": "We'd like the counterparty to indemnify us, given the risk profile of this engagement.",
+      "scriptLong": "Given the risk allocation that makes sense for this deal, we'd like the counterparty to indemnify us for losses arising from their breach, negligence, or IP issues. It places responsibility on the party best positioned to control that risk and protects us as the relying party."
+    },
+    {
+      "term": "uncapped liability",
+      "aliases": [
+        "uncapped",
+        "unlimited liability",
+        "no liability cap",
+        "no limitation of liability"
+      ],
+      "definition": "No dollar limit on how much you can be sued for under the contract.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Leaves the counterparty fully exposed for damages — the strongest possible recourse for the protected party.",
+      "negotiationScript": "We'd like to keep liability uncapped (or high) for breaches that matter most to us.",
+      "scriptLong": "For the obligations we care most about — confidentiality, IP, data protection — we'd like liability to remain uncapped or set at a high cap, so our recourse matches the potential harm if the counterparty fails to perform on those critical terms."
+    },
+    {
+      "term": "consequential damages waiver",
+      "aliases": [
+        "consequential damages",
+        "indirect damages",
+        "loss of profits",
+        "waiver of consequential"
+      ],
+      "definition": "Both parties agree not to claim indirect losses — lost profits, lost revenue, business interruption.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "When it runs one way, it shields the drafting party from the largest category of damages (lost profits) while preserving their own claims.",
+      "negotiationScript": "We'd like the consequential-damages waiver to protect us from outsized indirect claims.",
+      "scriptLong": "We'd like a consequential-damages waiver so we aren't exposed to large, speculative indirect losses like lost profits. Where appropriate to the bargain, we'd like it weighted to protect our position on the obligations where our exposure would otherwise be hardest to quantify."
+    },
+    {
+      "term": "survival clause",
+      "aliases": [
+        "survival",
+        "survival period",
+        "shall survive"
+      ],
+      "definition": "Specifies which contract terms continue after the contract ends.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Extends the counterparty’s obligations (indemnities, reps) well past the contract’s end — keeping recourse alive for the protected party.",
+      "negotiationScript": "We'd like key obligations to survive well past termination so our recourse persists.",
+      "scriptLong": "We'd like indemnification, confidentiality, and core representations to survive termination for an extended period, so our ability to bring a claim isn't cut off shortly after the engagement ends and the counterparty stays accountable for the commitments we relied on."
+    },
+    {
+      "term": "assignment without consent",
+      "aliases": [
+        "assignment",
+        "assignability",
+        "freely assignable"
+      ],
+      "definition": "The other party can transfer the contract to anyone without your approval.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Lets the drafting party freely transfer the contract — to an affiliate, acquirer, or financing partner — without needing the other side’s permission.",
+      "negotiationScript": "We'd like the right to assign this agreement freely, including to affiliates and acquirers.",
+      "scriptLong": "We'd like flexibility to assign the agreement without the counterparty's consent — for instance to an affiliate, an acquirer of the business, or in connection with financing — so a corporate transaction or restructuring isn't held up by a consent requirement."
+    },
+    {
+      "term": "governing law",
+      "aliases": [
+        "governing law",
+        "choice of law",
+        "applicable law"
+      ],
+      "definition": "Specifies which state's laws apply to disputes.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Choosing a favorable forum (e.g. the drafter’s home state or a business-friendly jurisdiction) tilts dispute resolution toward the drafting party.",
+      "negotiationScript": "We'd like our home state's law and courts to govern for consistency and predictability.",
+      "scriptLong": "We'd like the agreement governed by our home state's law with exclusive venue there, so disputes are heard in a forum we know and can manage efficiently, with predictable outcomes and lower cost to us as the relying party."
+    },
+    {
+      "term": "material breach",
+      "aliases": [
+        "material breach",
+        "material default",
+        "material violation"
+      ],
+      "definition": "A violation serious enough to let the other party terminate the contract.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "A flexible, undefined \"material breach\" standard lets the protected party declare a breach material and terminate when it suits them.",
+      "negotiationScript": "We'd like flexibility in the material-breach standard so we can act decisively when needed.",
+      "scriptLong": "We'd like the material-breach provision to give us practical room to terminate or seek remedies when the counterparty's performance falls short, without an overly rigid definition or a lengthy cure process tying our hands when the relationship clearly isn't working."
+    },
+    {
+      "term": "no cure period",
+      "aliases": [
+        "cure period",
+        "right to cure",
+        "opportunity to cure"
+      ],
+      "definition": "The absence of a grace period to fix a breach before penalties or termination apply.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Without a cure period, the protected party can terminate or impose penalties on the first breach — maximum leverage.",
+      "negotiationScript": "We'd prefer no mandatory cure period for serious breaches so we can act immediately.",
+      "scriptLong": "For breaches that genuinely matter — payment default, confidentiality, IP — we'd prefer not to be locked into a mandatory cure period, so we can terminate or enforce remedies promptly rather than being required to give the counterparty repeated chances to fix a serious problem."
+    },
+    {
+      "term": "third-party beneficiary",
+      "aliases": [
+        "third party beneficiary",
+        "third-party rights",
+        "third party beneficiary rights"
+      ],
+      "definition": "Someone not party to the contract who can enforce its terms.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Naming a third-party beneficiary lets an affiliate, lender, or related entity directly enforce the contract — extending the drafter’s reach.",
+      "negotiationScript": "We'd like our affiliates named as third-party beneficiaries so they can enforce key terms.",
+      "scriptLong": "We'd like to designate our affiliates and financing partners as third-party beneficiaries of the relevant protections, so those entities can directly enforce confidentiality, IP, and indemnity terms they rely on without being formal signatories."
+    },
+    {
+      "term": "entire agreement",
+      "aliases": [
+        "entire agreement",
+        "integration clause",
+        "merger clause",
+        "whole agreement"
+      ],
+      "definition": "The written contract is the complete deal — verbal promises and prior discussions don't count.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Wipes out any verbal promises or side assurances — the counterparty is bound only by the written terms the drafter controls.",
+      "negotiationScript": "We'd like a strong integration clause so only the signed document governs.",
+      "scriptLong": "We'd like a robust entire-agreement/integration clause so the executed contract is the complete and exclusive statement of the deal. It prevents disputes over alleged verbal commitments and keeps the parties bound strictly to the written terms we negotiated."
+    },
+    {
+      "term": "force majeure",
+      "aliases": [
+        "force majeure",
+        "act of god",
+        "force majeure clause"
+      ],
+      "definition": "Lets parties off the hook if something unforeseeable happens — natural disaster, war, pandemic.",
+      "category": "general",
+      "isGreenFlag": true,
+      "benefitNote": "Excuses the protected party’s performance during disruptions — and, drafted carefully, can keep the counterparty’s payment obligations running.",
+      "negotiationScript": "We'd like a force majeure clause that excuses our performance while preserving amounts owed to us.",
+      "scriptLong": "We'd like a force majeure clause that suspends our delivery obligations during genuinely unforeseeable events, while keeping the counterparty's payment and accrued obligations intact, so an external disruption doesn't cost us both performance flexibility and revenue."
+    }
+  ]
+}

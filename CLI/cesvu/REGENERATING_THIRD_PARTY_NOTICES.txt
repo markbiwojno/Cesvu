@@ -1,0 +1,152 @@
+cesvu — How to regenerate the third-party license bundle
+=========================================================
+
+This document describes what to do when the bundled
+``THIRD_PARTY_LICENSES.txt`` (or ``NOTICE`` / ``NOTICE.txt``) needs to
+be updated. The short version:
+
+  1. Install cesvu (the CLI you're packaging) and its deps in a
+     known-good venv.
+  2. From the ``CLI/cesvu/`` directory, run:
+         python scripts/generate_third_party_licenses.py
+     (or ``cesvu-licenses`` if the package is installed).
+  3. Commit the regenerated files
+     (``src/cesvu/licenses/THIRD_PARTY_LICENSES.txt``, and the NOTICE
+     mirror at ``src/cesvu/NOTICE.txt`` if it changed).
+  4. Verify in CI with:
+         python scripts/generate_third_party_licenses.py --check
+
+
+When to regenerate
+------------------
+- Before every PyPI release (i.e. before running ``python -m build`` +
+  ``twine upload``).
+- After adding, removing, or pinning a new dependency in
+  ``[project].dependencies`` in ``pyproject.toml``. The bundle's
+  closures change whenever the dep graph changes.
+- After running ``pip install --upgrade <some-dep>`` and committing the
+  new lock — the regenerated bundle should track new versions verbatim.
+- Whenever ``python scripts/generate_third_party_licenses.py --check``
+  fails in CI.
+
+
+What the generator does
+-----------------------
+1. Reads ``pyproject.toml`` and extracts the project's
+   ``[project].dependencies`` list to seed the traversal.
+2. Calls ``importlib.metadata.distributions()`` to enumerate every
+   installed distribution in the active Python environment.
+3. Walks ``Requires-Dist`` recursively from each direct dep, building
+   the transitive closure.
+4. For each distribution in the closure, locates any files named
+   ``LICENSE`` / ``LICENSE.txt`` / ``LICENSE.md`` / ``LICENSE.rst`` /
+   ``COPYING`` / ``COPYING.txt`` / ``NOTICE`` / ``NOTICE.txt`` (case
+   insensitive) both inside the dist-info directory and inside every
+   directory listed in ``dist.files`` (so vendored packages whose
+   LICENSE lives next to their .py also get caught).
+5. Concatenates the verbatim contents into a single text file, each
+   preceded by a header carrying the project name, version, SPDX
+   license expression, and homepage URL.
+
+The generator always pins the cesvu package itself to the TOP of the
+bundle so any reviewer reading the file finds our own Apache 2.0 text
+first.
+
+
+Files produced
+--------------
+- ``src/cesvu/licenses/THIRD_PARTY_LICENSES.txt`` — the bundled
+  third-party license text. This file is shipped inside both the sdist
+  and the wheel (via PEP 639 ``license-files``), and a copy is also
+  baked into the installed package via
+  ``[tool.setuptools].package-data`` so ``pip show -f cesvu`` lists it.
+- (Read-only.) It does NOT touch ``LICENSE.txt`` (the verbatim
+  copy of the project's own Apache 2.0 text) or ``NOTICE.txt`` — those
+  are checked-in references and rarely change.
+
+
+Generating by hand (no install)
+--------------------------------
+If you have a fresh git checkout and don't want to ``pip install -e .``
+the package, just run the wrapper from the package directory::
+
+    cd CLI/cesvu
+    python scripts/generate_third_party_licenses.py
+
+The wrapper prepends ``src/`` to ``sys.path`` so ``cesvu.licenses`` is
+importable without an install. This is the recommended invocation in
+CI before publishing.
+
+
+Generating from a wheel-install
+----------------------------------
+After ``pip install -e .`` (or ``pip install cesvu`` in a developer's
+venv), the bundle rebuilder is also registered as a console script::
+
+    cesvu-licenses                # write
+    cesvu-licenses --check        # CI freshness gate
+
+Both routes invoke the same ``cesvu.licenses.main()`` entry point.
+
+
+CI integration
+--------------
+Add to your pre-publish / pre-merge pipeline::
+
+    python scripts/generate_third_party_licenses.py --check
+
+Exit code semantics:
+- 0  — the bundled file matches what would be regenerated from the
+        current dep tree; safe to publish.
+- 1  — the bundled file is stale. Re-run without ``--check`` (or
+        ``cesvu-licenses``) to overwrite, then commit the result.
+
+A typical publish flow looks like::
+
+    python scripts/generate_third_party_licenses.py          # regenerate
+    git add src/cesvu/licenses/THIRD_PARTY_LICENSES.txt
+    git commit -m "license: regenerate THIRD_PARTY_LICENSES.txt"
+    python -m build .                                          # sdist + wheel
+    twine check dist/*                                         # metadata lint
+    twine upload dist/*.tar.gz dist/*.whl                     # publish
+
+
+Where the output ends up in the published artifacts
+---------------------------------------------------
+Both the sdist (``cesvu-<version>.tar.gz``) and the wheel
+(``cesvu-<version>-py3-none-any.whl``) carry these files:
+
+- ``cesvu-<v>.dist-info/LICENSE.txt`` and ``NOTICE.txt`` — top-level
+  license files (PEP 639 ``license-files``).
+- ``cesvu/licenses/THIRD_PARTY_LICENSES.txt`` — installed via
+  ``package-data``.
+- ``cesvu-licenses`` console-script entrypoint.
+
+After ``pip install cesvu-<v>.whl`` the user can verify with::
+
+    pip show -f cesvu | grep -E "LICENSE|NOTICE|licenses"
+    python -c "import importlib.resources as r; print(r.files('cesvu.licenses').joinpath('THIRD_PARTY_LICENSES.txt').read_text()[:200])"
+
+
+Limitations / known gotchas
+---------------------------
+- The generator walks Requires-Dist edges from the active Python
+  environment, which means it sees only what is INSTALLED. If a
+  dependency is declared in ``pyproject.toml`` but isn't actually
+  installed yet, it won't appear in the bundle. Always
+  ``pip install -e .`` (or equivalent) before regenerating.
+- Wheels that don't include a LICENSE / NOTICE / COPYING file (rare,
+  but possible for single-file shim packages) are listed in a "missing
+  license text" footer at the bottom of the bundle with a pointer to
+  their homepage. The License: SPDX expression from METADATA is shown
+  even when the file is missing, so the reviewer still sees what the
+  upstream declares.
+- The generator is read-only against the project source. The only files
+  it writes are the ``THIRD_PARTY_LICENSES.txt`` bundle (and, indirectly,
+  the directory it lives in).
+
+
+Questions?
+-----------
+Open an issue or PR on GitHub. The generator is a single ~200-line
+Python module: ``src/cesvu/licenses.py``.

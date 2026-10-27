@@ -1,0 +1,63 @@
+# Cloudflare Pages headers for app.cesvu.com
+#
+# Reference: https://developers.cloudflare.com/pages/configuration/headers/
+#
+# Order matters: more-specific paths first; the global `/*` block sets the
+# baseline and per-path overrides below refine it.
+
+/*
+  # Force HTTPS + enable HSTS preload submission.
+  Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+
+  # Defense-in-depth MIME sniffing guard.
+  X-Content-Type-Options: nosniff
+
+  # No framing — UI is a SPA, never embeddable.
+  X-Frame-Options: DENY
+
+  # Don't leak the URL of the current page to third parties.
+  Referrer-Policy: no-referrer
+
+  # Disable every powerful API we don't need. The browser will refuse to
+  # grant any of these even if a sub-resource asks. When passkey/WebAuthn
+  # PRF lands in v1.1, publickey-credentials-get=() will need to be removed
+  # for the routes that present a passkey prompt.
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), serial=(), bluetooth=(), midi=(), accelerometer=(), gyroscope=(), magnetometer=(), autoplay=(), encrypted-media=()
+
+  # Cross-origin isolation for SharedArrayBuffer / WebGPU.
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: require-corp
+  Cross-Origin-Resource-Policy: same-origin
+
+  # Strict CSP. script-src is locked to 'self' — SRI attributes on every
+  # local <script> provide defense-in-depth against compromised bundle hashes.
+  # 'unsafe-inline' is kept on style-src because Tailwind + Svelte hydration
+  # currently emit inline <style> blocks; migration to nonce-based styling is
+  # tracked as a follow-up.
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self'; connect-src 'self' https://ai.cesvu.com; worker-src 'self' blob:; frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'; upgrade-insecure-requests
+
+  # HTML must always revalidate — never let a stale shell stick around after
+  # a deploy. The build pipeline appends a content hash to JS/CSS filenames
+  # so per-asset caching is handled in the /_app/immutable/* block below.
+  Cache-Control: public, max-age=0, must-revalidate
+
+# Hashed, content-addressed Vite/SvelteKit assets. Immutable for a year.
+# The hash in the filename is the integrity guarantee; the long cache just
+# saves bandwidth on repeat visits.
+/_app/immutable/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# The integrity manifest itself must always be re-validated so the browser
+# notices when a deploy has happened.
+/integrity.json
+  Cache-Control: public, max-age=0, must-revalidate
+
+# The static integrity-failure page must always be revalidated too.
+/integrity-fail.html
+  Cache-Control: public, max-age=0, must-revalidate
+
+# The service worker registration file. Allow the SW to claim the full
+# origin scope (required for /sw.js to control /).
+/sw.js
+  Service-Worker-Allowed: /
+  Cache-Control: public, max-age=0, must-revalidate

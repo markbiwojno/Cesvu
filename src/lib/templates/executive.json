@@ -1,0 +1,47 @@
+{
+  "id": "executive",
+  "name": "Executive Brief",
+  "description": "3-minute read: bottom line, key insights, and recommended actions",
+  "icon": "🎯",
+  "tier": "free",
+  "fileTypes": ["csv", "pdf", "docx", "txt", "md"],
+  "bestFor": ["csv", "pdf", "docx", "txt", "md"],
+  "sections": [
+    {
+      "id": "bottom_line",
+      "type": "summary",
+      "title": "Bottom Line",
+      "description": "The single most important thing to know — 2-3 sentences max",
+      "required": true
+    },
+    {
+      "id": "key_insights",
+      "type": "insights",
+      "title": "3–5 Key Insights",
+      "description": "The most important findings, in order of significance",
+      "required": true
+    },
+    {
+      "id": "risks",
+      "type": "anomalies",
+      "title": "Risks & Concerns",
+      "description": "What could go wrong or requires attention",
+      "required": true
+    },
+    {
+      "id": "recommended_actions",
+      "type": "insights",
+      "title": "Recommended Actions",
+      "description": "Specific next steps, in priority order",
+      "required": true
+    },
+    {
+      "id": "open_questions",
+      "type": "markdown",
+      "title": "Open Questions",
+      "description": "What still needs to be answered before deciding",
+      "required": false
+    }
+  ],
+  "systemPrompt": "You are a chief of staff preparing a briefing for a C-suite executive. Be ruthlessly concise. No jargon. No filler. Every sentence must earn its place. The executive has 3 minutes. Give them the bottom line first, then the 3-5 most important insights, then risks, then recommended actions. Use bullet points. Cite specific data.\n\nRespond with a JSON object with these keys: bottom_line (string, max 3 sentences), key_insights (array of 3-5 strings), risks (array of strings), recommended_actions (array of strings starting with action verbs), open_questions (string)."
+}

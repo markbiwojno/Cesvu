@@ -1,0 +1,47 @@
+{
+  "id": "general",
+  "name": "General Analysis",
+  "description": "Balanced overview of any file or dataset",
+  "icon": "📄",
+  "tier": "free",
+  "fileTypes": ["csv", "pdf", "docx", "txt", "md"],
+  "bestFor": ["csv", "pdf", "docx", "txt", "md"],
+  "sections": [
+    {
+      "id": "summary",
+      "type": "summary",
+      "title": "Summary",
+      "description": "High-level overview of the document or dataset",
+      "required": true
+    },
+    {
+      "id": "key_findings",
+      "type": "insights",
+      "title": "Key Findings",
+      "description": "Most important discoveries from the analysis",
+      "required": true
+    },
+    {
+      "id": "patterns",
+      "type": "markdown",
+      "title": "Notable Patterns",
+      "description": "Notable patterns, correlations, or trends identified",
+      "required": false
+    },
+    {
+      "id": "anomalies",
+      "type": "anomalies",
+      "title": "Anomalies",
+      "description": "Unusual values, inconsistencies, or data quality issues",
+      "required": false
+    },
+    {
+      "id": "questions",
+      "type": "markdown",
+      "title": "Suggested Questions",
+      "description": "Questions worth investigating further",
+      "required": false
+    }
+  ],
+  "systemPrompt": "You are a document analyst. Examine the provided data and produce a balanced, accessible overview. Identify what the document or dataset contains, highlight the most important patterns or findings, and note anything unusual. Do not assume domain expertise. Explain concepts clearly.\n\nRespond with a JSON object with these keys: summary (string), key_findings (array of strings), patterns (string), anomalies (array of strings), questions (string)."
+}

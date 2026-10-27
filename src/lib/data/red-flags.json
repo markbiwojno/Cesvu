@@ -1,0 +1,635 @@
+{
+  "version": "1.0",
+  "description": "Red flag legal terms for Cesvu contract analysis. Terms with isRedFlag: true have risk notes explaining why they're dangerous.",
+  "terms": [
+    {
+      "term": "non-compete clause",
+      "aliases": [
+        "non-compete",
+        "noncompete",
+        "covenant not to compete",
+        "restrictive covenant"
+      ],
+      "definition": "Prevents you from working for competitors or starting a competing business for a set time after leaving.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Red flag if overly broad in time, geography, or industry scope. Unenforceable in some states (California, North Dakota, Oklahoma). Even if unenforceable, employers use them to intimidate.",
+      "negotiationScript": "I'd like to narrow this non-compete to 6 months, limited to direct competitors in our specific market.",
+      "scriptLong": "As written, the non-compete is broader than necessary to protect legitimate business interests. I'd like to narrow it to a 6-month term, limited to direct competitors in our specific market and the geography where I actually worked. I'm also asking for a carve-out so it doesn't apply if I'm terminated without cause."
+    },
+    {
+      "term": "intellectual property assignment",
+      "aliases": [
+        "IP assignment",
+        "assignment of inventions",
+        "work for hire",
+        "proprietary rights"
+      ],
+      "definition": "Anything you create as part of your job — code, designs, inventions — belongs to the employer.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Check for a pre-existing IP carve-out. Without it, the company may claim ownership of work you did before joining or on your own time. California Labor Code § 2870 provides some protection.",
+      "negotiationScript": "Can we add a carve-out for IP I created before joining and work done on my own time with my own resources?",
+      "scriptLong": "I'm fine assigning work created within the scope of my role, but I'd like a pre-existing IP carve-out for anything I built before joining, plus the standard protection for inventions developed entirely on my own time, with my own equipment, unrelated to the company's business (consistent with statutes like California Labor Code § 2870)."
+    },
+    {
+      "term": "arbitration clause",
+      "aliases": [
+        "arbitration",
+        "binding arbitration",
+        "arbitration agreement",
+        "mandatory arbitration"
+      ],
+      "definition": "Requires disputes to be resolved by a private arbitrator instead of in court.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Strips your right to sue in court. Arbitrators are paid by the employer (repeat customer). No jury. No public record. No meaningful appeal. Often paired with a class action waiver.",
+      "negotiationScript": "I'd prefer to preserve my right to court, or at minimum make arbitration mutual with a neutral arbitrator and shared costs.",
+      "scriptLong": "Mandatory arbitration strips my right to a jury and a public record. I'd prefer to remove it. If it stays, I'm asking that it be mutual, that the arbitrator be chosen from a neutral panel, that the company pay the arbitration fees, and that it not be paired with a class action waiver."
+    },
+    {
+      "term": "class action waiver",
+      "aliases": [
+        "class action",
+        "waiver of class action",
+        "class action waiver"
+      ],
+      "definition": "You agree not to join a class action lawsuit against the employer.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Combined with mandatory arbitration, this blocks nearly all legal recourse. Individual claims are often too small to pursue alone. This is how companies escape accountability for widespread violations.",
+      "negotiationScript": "I'm not comfortable waiving class action rights — can we remove this clause?",
+      "scriptLong": "A class action waiver combined with arbitration effectively blocks all meaningful recourse, since individual claims are often too small to pursue alone. I'd like this clause removed. If that's not possible, I'd want carve-outs for statutory claims that can't legally be waived."
+    },
+    {
+      "term": "indemnity",
+      "aliases": [
+        "indemnification",
+        "indemnify",
+        "hold harmless"
+      ],
+      "definition": "You agree to cover the employer's losses if you cause damage.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Red flag in employment contracts. More common in executive/C-suite roles. You could be personally liable for company losses. Push for mutual indemnification or removal.",
+      "negotiationScript": "Can we make indemnification mutual, or remove my personal indemnification obligation entirely?",
+      "scriptLong": "Asking an employee to indemnify the company is unusual and one-sided. I'd like to either remove my indemnification obligation or make it mutual, and to cap any exposure and exclude losses arising from the company's own negligence or instructions."
+    },
+    {
+      "term": "moonlighting clause",
+      "aliases": [
+        "moonlighting",
+        "outside employment",
+        "exclusive employment",
+        "outside business activities"
+      ],
+      "definition": "Restricts you from working other jobs or side projects while employed.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "May be overly restrictive. Look for 'with prior written consent' language. Without it, even a weekend side project unrelated to your job could be a fireable offense.",
+      "negotiationScript": "Can we add 'with prior written consent, not to be unreasonably withheld' so unrelated side projects are allowed?",
+      "scriptLong": "I'd like the outside-activities restriction softened to allow side projects that don't compete with or interfere with my role. Specifically, adding 'with prior written consent, which will not be unreasonably withheld' and an explicit carve-out for passive investments and unrelated personal projects."
+    },
+    {
+      "term": "relocation clause",
+      "aliases": [
+        "relocation",
+        "transfer clause",
+        "mobility clause"
+      ],
+      "definition": "Employer can require you to move to a different location.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Check if relocation expenses are covered and if you have any say in the decision. Without protections, you could be forced to move or quit — and quitting may disqualify you from unemployment.",
+      "negotiationScript": "Can we cap relocation to one move, require my consent, and have the company cover all relocation costs?",
+      "scriptLong": "Before agreeing to a relocation clause, I'd like it to require my written consent, to be limited to a defined set of locations, to be capped at one relocation during my employment, and to commit the company to covering all reasonable relocation expenses. I'd also want the right to decline without it being treated as a resignation."
+    },
+    {
+      "term": "termination for cause",
+      "aliases": [
+        "for cause",
+        "termination with cause",
+        "gross misconduct"
+      ],
+      "definition": "Defines grounds for immediate termination without severance or notice.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "If 'cause' is defined broadly (e.g., 'failure to perform duties satisfactorily'), the employer can deny severance for minor issues. Push for specific, objective definitions.",
+      "negotiationScript": "Can we define 'cause' with specific, objective grounds and add a notice-and-cure period?",
+      "scriptLong": "The definition of 'cause' is too broad. I'd like it limited to specific, objective events (e.g., conviction of a felony, material breach, willful misconduct) and to include written notice plus a reasonable cure period for anything curable before termination for cause applies."
+    },
+    {
+      "term": "other duties as assigned",
+      "aliases": [
+        "other duties",
+        "duties as assigned",
+        "additional responsibilities"
+      ],
+      "definition": "Your role includes unspecified tasks beyond your job description.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "Overly broad language lets the employer change your role without consent. You could be hired as an engineer and assigned to janitorial work. Push for 'reasonably related to your position.'",
+      "negotiationScript": "Can we add 'reasonably related to my position' so my role can't be changed arbitrarily?",
+      "scriptLong": "Open-ended 'other duties as assigned' language lets the role change without my consent. I'd like to qualify it with 'duties reasonably related to my position and consistent with my title and seniority' so the scope of my job is predictable."
+    },
+    {
+      "term": "discretionary bonus",
+      "aliases": [
+        "discretionary",
+        "bonus at discretion",
+        "sole discretion"
+      ],
+      "definition": "Bonus payments are at the employer's complete discretion, not guaranteed.",
+      "category": "employment",
+      "isRedFlag": true,
+      "riskNote": "If your bonus is 'discretionary,' it's not really part of your compensation — it's a gift they can withhold. Push for objective, measurable bonus criteria.",
+      "negotiationScript": "Can we tie the bonus to objective, measurable criteria instead of leaving it fully discretionary?",
+      "scriptLong": "If the bonus is fully discretionary, it isn't really part of my compensation. I'd like to tie it to objective, measurable targets with a defined target amount and payout formula, and to clarify how it's prorated on departure so it functions as real, earned compensation."
+    },
+    {
+      "term": "release of claims",
+      "aliases": [
+        "release",
+        "general release",
+        "waiver of claims",
+        "release of all claims"
+      ],
+      "definition": "You agree not to sue the employer in exchange for severance pay.",
+      "category": "severance",
+      "isRedFlag": true,
+      "riskNote": "You are giving up legal rights — potentially including discrimination, harassment, or wage claims — in exchange for money. Know what claims you're releasing before you sign. The broader the release, the more severance you should demand.",
+      "negotiationScript": "Given the breadth of this release, I'd like the severance increased and carve-outs for claims that can't be waived.",
+      "scriptLong": "I'm being asked to release significant legal rights. In exchange I'd like the severance increased, and I want explicit carve-outs for claims that can't legally be released (e.g., vested benefits, unemployment, workers' comp, and the right to file charges with government agencies). I'd also like time to have it reviewed by counsel."
+    },
+    {
+      "term": "non-disparagement clause",
+      "aliases": [
+        "non-disparagement",
+        "disparagement",
+        "non-disparage"
+      ],
+      "definition": "You cannot make negative statements about the company or its leadership.",
+      "category": "severance",
+      "isRedFlag": true,
+      "riskNote": "May violate NLRA rights for non-supervisory employees. The NLRB has ruled that overly broad non-disparagement clauses in severance agreements are unlawful. Ensure carve-outs for truthful statements to government agencies.",
+      "negotiationScript": "Can we make non-disparagement mutual and add carve-outs for truthful statements to government agencies?",
+      "scriptLong": "I'd like the non-disparagement obligation to be mutual (binding the company and its leadership as well), and to include carve-outs for truthful statements, statements to government agencies, and legally protected activity, consistent with recent NLRB guidance on overly broad clauses."
+    },
+    {
+      "term": "non-compete",
+      "aliases": [
+        "non-compete",
+        "noncompete",
+        "covenant not to compete"
+      ],
+      "definition": "Restricts future employment with competitors after leaving.",
+      "category": "severance",
+      "isRedFlag": true,
+      "riskNote": "You're already leaving the company. A non-compete in a severance agreement is extra restrictive and harder to justify. The FTC's 2024 ban on most non-competes may apply — check current status.",
+      "negotiationScript": "I'd like to narrow this non-compete in time, geography, and scope — or remove it given I'm already departing.",
+      "scriptLong": "A non-compete in a severance context is especially hard to justify since I'm already leaving. I'd like to remove it, or failing that, narrow it sharply in duration, geography, and to direct competitors only — and to confirm it's enforceable under current law in the governing state."
+    },
+    {
+      "term": "ADEA waiver",
+      "aliases": [
+        "ADEA",
+        "age discrimination waiver",
+        "Older Workers Benefit Protection Act"
+      ],
+      "definition": "Special protections for workers 40+: 21-day review period, 7-day revocation right, plain language requirement.",
+      "category": "severance",
+      "isRedFlag": true,
+      "riskNote": "If you're 40+ and these protections aren't in the agreement, the age discrimination waiver may be unenforceable. Don't sign immediately — use the full 21 days. You have 7 days after signing to revoke.",
+      "negotiationScript": "I'm 40+, so I'd like the full 21-day review period and the 7-day revocation right preserved in writing.",
+      "scriptLong": "Because I'm over 40, the age-discrimination waiver must comply with the OWBPA: a 21-day consideration period (45 days in a group layoff), a 7-day revocation window, and plain-language disclosures. I'd like all of these explicitly stated, and I intend to use the full review period rather than signing immediately."
+    },
+    {
+      "term": "confidentiality of agreement",
+      "aliases": [
+        "confidentiality",
+        "non-disclosure of terms",
+        "secrecy clause"
+      ],
+      "definition": "You cannot reveal the terms of the severance deal or the negotiation.",
+      "category": "severance",
+      "isRedFlag": true,
+      "riskNote": "This prevents you from telling coworkers what you got — which helps the company lowball everyone else. Ensure carve-outs for spouse, attorney, tax advisor, and government agencies.",
+      "negotiationScript": "Can we add carve-outs so I can discuss the terms with my spouse, attorney, tax advisor, and government agencies?",
+      "scriptLong": "I'll keep the terms confidential, but I need standard carve-outs allowing disclosure to my spouse/partner, legal counsel, financial and tax advisors, and any government agency or as required by law. Otherwise the clause is broader than necessary and may not be enforceable."
+    },
+    {
+      "term": "full ratchet",
+      "aliases": [
+        "ratchet",
+        "full ratchet anti-dilution",
+        "ratchet anti-dilution"
+      ],
+      "definition": "If the company issues shares at a lower price in the future, earlier investors get more shares to compensate — as if they invested at the lower price.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Major red flag. Can devastate founder equity in a down round. A single low-priced share issuance can massively dilute founders. Weighted average anti-dilution is the market standard and far more founder-friendly.",
+      "negotiationScript": "Can we use broad-based weighted-average anti-dilution instead of full ratchet?",
+      "scriptLong": "Full-ratchet anti-dilution can devastate founder and employee equity after a single down-round issuance. The market standard is broad-based weighted-average anti-dilution, which is far more balanced. I'd like to switch to that."
+    },
+    {
+      "term": "participating preferred",
+      "aliases": [
+        "participating",
+        "participating preferred stock",
+        "double dip"
+      ],
+      "definition": "Investors get their liquidation preference AND share in remaining proceeds with common shareholders.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Red flag unless capped. This lets investors 'double-dip' — they get their money back first, then share in what's left. Non-participating preferred is the founder-friendly standard. If you must accept participating, cap it at 2–3x.",
+      "negotiationScript": "Can we move to non-participating preferred, or at least cap participation at 1x?",
+      "scriptLong": "Participating preferred lets investors double-dip — taking their preference and then sharing in the remainder. The founder-friendly standard is non-participating preferred. I'd like to use that, or if participation must stay, cap it at 1x so it converts to common above the cap."
+    },
+    {
+      "term": "liquidation preference",
+      "aliases": [
+        "liquidation pref",
+        "liquidation preference",
+        "pref",
+        "preference"
+      ],
+      "definition": "Who gets paid first and how much if the company is sold. Usually expressed as a multiple (1x, 2x, 3x).",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Above 1x is founder-unfriendly. A 3x liquidation preference means investors get triple their money back before founders see a dollar. In a modest exit, founders can walk away with nothing.",
+      "negotiationScript": "Can we keep the liquidation preference at a standard 1x, non-participating?",
+      "scriptLong": "A liquidation preference above 1x means investors take a multiple of their money before anyone else sees proceeds, which can leave founders with nothing in a modest exit. I'd like to keep it at the market-standard 1x, non-participating."
+    },
+    {
+      "term": "redemption rights",
+      "aliases": [
+        "redemption",
+        "mandatory redemption",
+        "put right"
+      ],
+      "definition": "Investors can demand the company buy back their shares after a set period.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Red flag. If the company doesn't have cash to redeem, this can force bankruptcy. Most institutional VCs don't exercise redemption rights, but it gives them leverage. Push to remove or make redemption optional at the company's discretion.",
+      "negotiationScript": "Can we remove redemption rights, or make redemption optional at the company's discretion?",
+      "scriptLong": "Mandatory redemption can force the company into a cash crunch or even bankruptcy if it must buy back shares. I'd like to remove redemption rights, or at minimum make redemption subject to the company's discretion and legally available funds, with a long runway before they can be exercised."
+    },
+    {
+      "term": "option pool",
+      "aliases": [
+        "option pool",
+        "employee pool",
+        "ESOP",
+        "equity pool"
+      ],
+      "definition": "Equity reserved for future employee grants. Usually 10–20% of fully diluted shares.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "If the option pool is included in the pre-money valuation, it dilutes founders — not investors. Negotiate for the pool to be created from the post-money capitalization, or for a smaller pool that expands as needed.",
+      "negotiationScript": "Can we size the option pool from the post-money cap so it doesn't dilute founders alone?",
+      "scriptLong": "If the option pool is carved out of pre-money, founders bear all the dilution. I'd like the pool created from the post-money capitalization, or sized to the actual hiring plan for the next 12–18 months so it isn't larger than necessary."
+    },
+    {
+      "term": "pay-to-play",
+      "aliases": [
+        "pay to play",
+        "pay-to-play provision"
+      ],
+      "definition": "Investors must participate in future rounds to keep their rights (anti-dilution, board seat, etc.).",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "This is actually founder-friendly — it prevents investors from abandoning you in tough times while keeping their preferential rights. But if YOU are an investor, this is a red flag. Know which side you're on.",
+      "negotiationScript": "I want to confirm which side this favors before agreeing — let's align it with our position in the round.",
+      "scriptLong": "Pay-to-play can be founder-friendly (it penalizes investors who don't continue to support the company) or investor-unfriendly depending on the structure. I'd like to confirm the mechanics and ensure the provision is consistent with our position and incentives in this round."
+    },
+    {
+      "term": "no-shop clause",
+      "aliases": [
+        "no shop",
+        "no-shop",
+        "exclusivity",
+        "exclusivity period"
+      ],
+      "definition": "You cannot solicit other investors for a set period (typically 30–60 days).",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Standard but dangerous if the period is too long. 30–45 days is reasonable. Beyond 60 days, the investor can string you along while your other options expire. Negotiate a hard deadline.",
+      "negotiationScript": "Can we cap the no-shop at 30 days with a hard expiration date?",
+      "scriptLong": "A no-shop is standard but risky if open-ended. I'd like to cap it at 30 days (45 at most), with a hard expiration so I'm not locked out of other options if the deal stalls, plus a fiduciary-out for the board."
+    },
+    {
+      "term": "material adverse change",
+      "aliases": [
+        "MAC",
+        "material adverse change",
+        "MAC clause"
+      ],
+      "definition": "Lets investors walk away if something bad happens to the company before closing.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Broad MAC clauses give investors an easy exit if they get cold feet. Negotiate carve-outs for industry-wide conditions, economic downturns, and events that don't disproportionately affect your company.",
+      "negotiationScript": "Can we add carve-outs so general market and industry conditions don't trigger the MAC?",
+      "scriptLong": "A broad MAC clause gives the investor an easy exit if they get cold feet. I'd like carve-outs for economy-wide and industry-wide conditions, changes in law, and events that don't disproportionately affect our company, so it only covers truly company-specific problems."
+    },
+    {
+      "term": "cumulative dividends",
+      "aliases": [
+        "cumulative",
+        "accruing dividends",
+        "dividend accrual"
+      ],
+      "definition": "Dividends that accrue over time if unpaid and get added to the liquidation preference.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "Cumulative dividends grow the investor's liquidation preference every year — like compound interest working against founders. In a 5–7 year hold, this can add millions to what investors get before you see anything. Push for non-cumulative or remove entirely.",
+      "negotiationScript": "Can we make dividends non-cumulative, or remove the accruing dividend entirely?",
+      "scriptLong": "Cumulative dividends compound the investor's liquidation preference every year, quietly growing what they take before founders see anything. I'd like dividends to be non-cumulative and payable only when declared by the board, or removed entirely."
+    },
+    {
+      "term": "founder vesting",
+      "aliases": [
+        "vesting",
+        "founder shares vesting",
+        "reverse vesting"
+      ],
+      "definition": "Founders' shares vest over time, just like employees. Standard: 4 years with 1-year cliff.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "If you've already built the company for years, push back on re-vesting your existing equity. Vesting should apply to unvested shares going forward, not shares you've already earned. Negotiate for acceleration on termination without cause.",
+      "negotiationScript": "Can we credit my time served and add double-trigger acceleration on a change of control?",
+      "scriptLong": "I've already built meaningful value, so I'd like vesting to credit time already served (or vest a portion up front), apply only to unvested shares going forward, and include acceleration — ideally double-trigger — on a change of control or termination without cause."
+    },
+    {
+      "term": "representations and warranties",
+      "aliases": [
+        "reps and warranties",
+        "representations",
+        "warranties",
+        "R&W"
+      ],
+      "definition": "Legal promises about the company's status — finances, IP ownership, litigation, compliance.",
+      "category": "startup-vc",
+      "isRedFlag": true,
+      "riskNote": "You are personally liable for breaches as a founder. If you say 'the company owns all its IP' and it turns out a contractor retained rights, investors can sue you personally. Get these right. Use knowledge qualifiers ('to the company's knowledge').",
+      "negotiationScript": "Can we add knowledge qualifiers and materiality thresholds, and cap my personal exposure?",
+      "scriptLong": "Since I can be personally liable for a breach, I'd like reps qualified by 'to the company's knowledge' where appropriate, materiality thresholds applied, a defined survival period, and a cap on my indemnification exposure tied to the proceeds I actually receive."
+    },
+    {
+      "term": "joint and several liability",
+      "aliases": [
+        "joint and several",
+        "jointly and severally",
+        "joint and several liability"
+      ],
+      "definition": "Each roommate is responsible for the entire rent, not just their share.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "If your roommate skips town or can't pay, you owe everything — not just your half. The landlord can come after you alone for the full amount. Consider a roommate agreement that gives you the right to sue a deadbeat roommate.",
+      "negotiationScript": "Can we make each tenant liable only for their proportional share of the rent?",
+      "scriptLong": "Joint and several liability means I could owe the entire rent if a roommate stops paying. I'd like liability to be several (proportional to each tenant's share). If the landlord insists on joint and several, I'd at least want a written roommate agreement giving me recourse against a non-paying roommate."
+    },
+    {
+      "term": "holdover tenant",
+      "aliases": [
+        "holdover",
+        "holding over",
+        "holdover rent"
+      ],
+      "definition": "Staying in the unit after the lease ends without signing a renewal.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "Can result in dramatically higher rent — often 150–200% of your normal rate — or immediate eviction proceedings. Set a calendar reminder 60 days before your lease ends to negotiate renewal or give notice.",
+      "negotiationScript": "Can we cap holdover rent at 110% of the normal rate rather than a steep penalty?",
+      "scriptLong": "Holdover penalties can spike rent to 150–200% of normal. I'd like the holdover rate capped at around 110% of the current rent and tied to written notice, so an accidental overstay during a renewal negotiation isn't financially punishing."
+    },
+    {
+      "term": "early termination clause",
+      "aliases": [
+        "early termination",
+        "lease break",
+        "break clause",
+        "buyout clause"
+      ],
+      "definition": "Conditions under which you can end the lease before the full term.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "Without an early termination clause, you owe rent for the entire remaining term — even if you move out. Negotiate a buyout clause (e.g., 2 months' rent + 30 days' notice). Without it, you're on the hook for potentially thousands.",
+      "negotiationScript": "Can we add an early-termination option of two months' rent plus 30 days' notice?",
+      "scriptLong": "Without an early-termination right I'm liable for the entire remaining term if I have to move. I'd like a defined buyout — for example two months' rent plus 30 days' written notice — and confirmation that the landlord must make reasonable efforts to re-rent and credit that against what I owe."
+    },
+    {
+      "term": "automatic renewal",
+      "aliases": [
+        "auto-renewal",
+        "automatic renewal",
+        "auto-renew",
+        "evergreen clause"
+      ],
+      "definition": "The lease automatically renews for another term unless you give notice within a specific window.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "If you miss the cancellation window (sometimes as narrow as 30 days in a 12-month lease), you're locked in for another full year. Set calendar reminders. Some states require landlords to notify you before auto-renewal kicks in.",
+      "negotiationScript": "Can we require the landlord to give written notice before any auto-renewal takes effect?",
+      "scriptLong": "Automatic renewal can trap me for another full term if I miss a narrow notice window. I'd like the landlord required to send written notice 30–60 days before renewal, a reasonable cancellation window, and ideally month-to-month terms after the initial period rather than another fixed year."
+    },
+    {
+      "term": "pet rent",
+      "aliases": [
+        "pet rent",
+        "pet fee",
+        "monthly pet fee"
+      ],
+      "definition": "Non-refundable monthly charge for having a pet, separate from a pet deposit.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "Pet rent is pure profit for the landlord — it's non-refundable and doesn't cover anything specific. Over a year, $50/month = $600 you'll never see again. Negotiate for a refundable pet deposit instead, or a one-time pet fee.",
+      "negotiationScript": "Can we replace non-refundable pet rent with a one-time fee or a refundable pet deposit?",
+      "scriptLong": "Monthly pet rent is non-refundable and doesn't cover anything specific — it adds up to hundreds a year. I'd prefer a refundable pet deposit that covers actual pet-related damage, or a modest one-time pet fee, instead of recurring pet rent."
+    },
+    {
+      "term": "waiver of habitability",
+      "aliases": [
+        "habitability",
+        "warranty of habitability",
+        "waiver of warranty"
+      ],
+      "definition": "Any clause suggesting the landlord doesn't have to keep the property livable.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "The warranty of habitability cannot be waived — even if the lease says otherwise. Heat, water, electricity, and safety are non-negotiable legal requirements. If you see this language, the landlord is either ignorant or predatory.",
+      "negotiationScript": "The warranty of habitability can't be waived — can we strike this clause?",
+      "scriptLong": "The implied warranty of habitability is non-waivable in essentially every state, so this clause is unenforceable and concerning. I'd like it struck entirely, with the lease affirming the landlord's duty to maintain heat, water, electricity, and a safe, livable unit."
+    },
+    {
+      "term": "self-help eviction",
+      "aliases": [
+        "self-help",
+        "lockout",
+        "constructive eviction"
+      ],
+      "definition": "Landlord attempts to remove you without a court order — changing locks, shutting off utilities, removing doors.",
+      "category": "rental",
+      "isRedFlag": true,
+      "riskNote": "Illegal in all 50 states. Eviction requires a court order. If your landlord threatens self-help, document everything and contact a tenants' rights organization immediately. You may be entitled to damages.",
+      "negotiationScript": "Can we confirm in writing that any eviction will follow the legal court process only?",
+      "scriptLong": "Self-help eviction — changing locks, shutting off utilities, removing doors — is illegal in all 50 states. I'd like the lease to expressly state that any eviction will follow the formal legal process with a court order, and to remove any language suggesting otherwise."
+    },
+    {
+      "term": "one-way indemnification",
+      "aliases": [
+        "one-way indemnity",
+        "unilateral indemnification",
+        "indemnification"
+      ],
+      "definition": "Only one party agrees to cover the other's losses — the obligation is not mutual.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "One-way indemnification is a red flag in most contracts. Mutual indemnification is the standard for arms-length deals. If only you are indemnifying the other party, you're taking on risk with no reciprocal protection.",
+      "negotiationScript": "Can we make indemnification mutual so both parties cover losses they cause?",
+      "scriptLong": "One-way indemnification puts all the risk on me with no reciprocal protection. The arms-length standard is mutual indemnification. I'd like both parties to indemnify each other for losses arising from their own breach, negligence, or IP infringement, with reasonable caps and carve-outs."
+    },
+    {
+      "term": "uncapped liability",
+      "aliases": [
+        "uncapped",
+        "unlimited liability",
+        "no liability cap",
+        "no limitation of liability"
+      ],
+      "definition": "No dollar limit on how much you can be sued for under the contract.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "Without a liability cap, a single breach could expose you to unlimited damages. Standard practice is to cap liability at fees paid (e.g., 12 months of fees) or a negotiated amount. Never accept uncapped liability unless you're the beneficiary.",
+      "negotiationScript": "Can we cap total liability at the fees paid over the prior 12 months?",
+      "scriptLong": "Uncapped liability exposes me to potentially unlimited damages from a single breach. I'd like an overall liability cap — commonly 12 months of fees paid — with narrow, mutual carve-outs (e.g., confidentiality breach, IP infringement, gross negligence) rather than leaving everything uncapped."
+    },
+    {
+      "term": "consequential damages waiver",
+      "aliases": [
+        "consequential damages",
+        "indirect damages",
+        "loss of profits",
+        "waiver of consequential"
+      ],
+      "definition": "Both parties agree not to claim indirect losses — lost profits, lost revenue, business interruption.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "This is standard and usually mutual — which is fine. But if ONLY you waive consequential damages and the other party doesn't, you're at a severe disadvantage. Check that the waiver is mutual.",
+      "negotiationScript": "Can we confirm the consequential-damages waiver is mutual?",
+      "scriptLong": "A mutual waiver of consequential damages is standard and fine. I just want to confirm it applies to both parties equally — if only I'm waiving lost profits and indirect losses while the other side isn't, I'd like it made reciprocal."
+    },
+    {
+      "term": "survival clause",
+      "aliases": [
+        "survival",
+        "survival period",
+        "shall survive"
+      ],
+      "definition": "Specifies which contract terms continue after the contract ends.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "Check survival periods. Indemnification that 'survives indefinitely' or 'survives in perpetuity' means you could be sued years after the contract ends. Standard survival periods: 1–3 years for commercial contracts, longer for IP and confidentiality.",
+      "negotiationScript": "Can we set defined survival periods rather than letting obligations survive indefinitely?",
+      "scriptLong": "Obligations that 'survive in perpetuity' can leave me exposed to claims years after the deal ends. I'd like defined survival periods — typically 1–3 years for general reps, with longer windows only for IP, confidentiality, and tax — rather than open-ended survival."
+    },
+    {
+      "term": "assignment without consent",
+      "aliases": [
+        "assignment",
+        "assignability",
+        "freely assignable"
+      ],
+      "definition": "The other party can transfer the contract to anyone without your approval.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "If the other party can assign the contract freely and you can't, you could end up in business with a company you never chose. Push for mutual consent requirements, or at minimum the right to assign to affiliates and acquirers.",
+      "negotiationScript": "Can we require mutual written consent before either party assigns the contract?",
+      "scriptLong": "If the other side can freely assign the contract, I could end up dealing with a party I never chose. I'd like assignment to require the other party's prior written consent (not to be unreasonably withheld), with a mutual carve-out allowing assignment to affiliates or an acquirer of the whole business."
+    },
+    {
+      "term": "governing law",
+      "aliases": [
+        "governing law",
+        "choice of law",
+        "applicable law"
+      ],
+      "definition": "Specifies which state's laws apply to disputes.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "Delaware = corporate-friendly. New York = neutral/commercial. California = employee/consumer-friendly. If the governing law is a state with no connection to either party, it's likely chosen to benefit the drafter. Push for your home state or a neutral jurisdiction.",
+      "negotiationScript": "Can we use my home state's law (or a neutral jurisdiction) rather than the drafter's choice?",
+      "scriptLong": "The chosen governing law and venue should have a real connection to the deal. I'd like to use my home state's law and courts, or a genuinely neutral jurisdiction, rather than one selected purely to advantage the drafting party."
+    },
+    {
+      "term": "material breach",
+      "aliases": [
+        "material breach",
+        "material default",
+        "material violation"
+      ],
+      "definition": "A violation serious enough to let the other party terminate the contract.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "'Material' is often undefined, which means the other party can claim any breach is material and terminate. Push for a cure period (10–30 days) and objective criteria for what constitutes a material breach.",
+      "negotiationScript": "Can we define 'material breach' objectively and add a 30-day notice-and-cure period?",
+      "scriptLong": "'Material breach' is often left undefined, letting the other side call any slip material and terminate. I'd like objective criteria for what counts as material and a written notice plus a 30-day cure period before termination or penalties apply."
+    },
+    {
+      "term": "no cure period",
+      "aliases": [
+        "cure period",
+        "right to cure",
+        "opportunity to cure"
+      ],
+      "definition": "The absence of a grace period to fix a breach before penalties or termination apply.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "Without a cure period, any breach — even a minor, unintentional one — can trigger immediate termination or penalties. Standard cure period: 10–30 days for monetary breaches, 15–30 days for non-monetary breaches. Always negotiate one.",
+      "negotiationScript": "Can we add a 30-day cure period so a fixable breach doesn't trigger immediate termination?",
+      "scriptLong": "Without a cure period, even a minor or unintentional breach can trigger immediate termination or penalties. I'd like to add a standard cure period — around 30 days for monetary breaches and 15–30 days for non-monetary breaches — with written notice required first."
+    },
+    {
+      "term": "third-party beneficiary",
+      "aliases": [
+        "third party beneficiary",
+        "third-party rights",
+        "third party beneficiary rights"
+      ],
+      "definition": "Someone not party to the contract who can enforce its terms.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "You usually want to explicitly exclude third-party beneficiaries. Without this exclusion, an unknown third party could potentially sue to enforce the contract. Standard language: 'This agreement is for the benefit of the parties only.'",
+      "negotiationScript": "Can we add language stating the agreement benefits the parties only, with no third-party beneficiaries?",
+      "scriptLong": "I'd like to expressly exclude third-party beneficiaries so an unknown outside party can't sue to enforce the contract. Standard language such as 'This agreement is for the benefit of the parties only and creates no third-party beneficiary rights' would cover it."
+    },
+    {
+      "term": "entire agreement",
+      "aliases": [
+        "entire agreement",
+        "integration clause",
+        "merger clause",
+        "whole agreement"
+      ],
+      "definition": "The written contract is the complete deal — verbal promises and prior discussions don't count.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "This is standard boilerplate, but it means any verbal promises made during negotiation are unenforceable. If the salesperson promised you something that's not in the contract, it doesn't count. Get everything in writing.",
+      "negotiationScript": "Before signing, let's put every promise made during negotiation into the written contract.",
+      "scriptLong": "The integration clause means anything not written down is unenforceable, so any verbal commitments made during the sales or negotiation process need to be captured in the contract itself or in an attached schedule before I sign."
+    },
+    {
+      "term": "force majeure",
+      "aliases": [
+        "force majeure",
+        "act of god",
+        "force majeure clause"
+      ],
+      "definition": "Lets parties off the hook if something unforeseeable happens — natural disaster, war, pandemic.",
+      "category": "general",
+      "isRedFlag": true,
+      "riskNote": "Check that force majeure applies equally to both parties. If only one party can claim it, the other party remains on the hook during disasters. Also check whether payment obligations are excused — many force majeure clauses exclude payment.",
+      "negotiationScript": "Can we make force majeure mutual and clarify how payment obligations are treated?",
+      "scriptLong": "I'd like the force majeure clause to apply equally to both parties, list the qualifying events, require reasonable mitigation and notice, and clarify whether and for how long payment obligations are suspended — many clauses one-sidedly excuse one party's performance while keeping the other on the hook."
+    }
+  ]
+}

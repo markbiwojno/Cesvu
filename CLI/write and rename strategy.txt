@@ -1,0 +1,73 @@
+Since you are using chunked streaming encryption, you are writing to the disk incrementally. If the process is killed (e.g., `Ctrl+C`, power failure, or system crash), the OS simply stops writing, leaving behind a **partially written, corrupted file** that looks like a valid encrypted file but is missing its tail.
+
+To prevent this, you must use the **"Write-and-Rename" (Atomic Rename) pattern**. This is the industry standard for ensuring file integrity.
+
+### The "Write-and-Rename" Strategy
+Instead of writing directly to `File.txt.cesvu`, you write to a **temporary hidden file** and only rename it to the final destination once the stream is successfully closed.
+
+#### The Workflow:
+1.  **Create a Temp File:** Generate a temporary filename (e.g., `.File.txt.cesvu.tmp`).
+2.  **Stream the Data:** Write all your encrypted chunks into this `.tmp` file.
+3.  **Flush and Close:** Ensure all buffers are flushed to disk.
+4.  **Atomic Rename:** Use the OS's atomic move command to rename `.File.txt.cesvu.tmp` $\rightarrow$ `File.txt.cesvu`.
+
+### Why this works:
+On almost all modern file systems (NTFS, APFS, ext4), a **rename** operation within the same partition is **atomic**. This means:
+- Either the file is renamed completely, or it isn't renamed at all.
+- There is no "half-renamed" state.
+- If the script is killed at any point during the streaming phase, you are left with a `.tmp` file that can be easily identified as garbage and ignored (or cleaned up), but the **original destination file is never created or overwritten** until the encryption is 100% complete.
+
+---
+
+### Python Implementation Example
+
+Here is the robust way to implement this in your Python CLI:
+
+```python
+import os
+import tempfile
+
+def encrypt_file(input_path, output_path, engine):
+    # 1. Create a temporary file in the same directory as the output
+    # Doing it in the same directory ensures the 'rename' is atomic 
+    # (moving across partitions is not atomic)
+    output_dir = os.path.dirname(output_path)
+    
+    # Use a temporary file that follows a naming convention
+    temp_fd, temp_path = tempfile.mkstemp(dir=output_dir, prefix=".tmp_", suffix=".cesvu")
+    
+    try:
+        with os.fdopen(temp_fd, 'wb') as tmp_file:
+            # Your streaming loop logic here
+            for chunk in engine.encrypt_stream(input_path):
+                tmp_file.write(chunk)
+            
+            # Force OS to write buffers to physical disk
+            tmp_file.flush()
+            os.fsync(tmp_file.fileno())
+
+        # 2. ATOMIC STEP: Only rename once everything is finished
+        os.replace(temp_path, output_path)
+        print(f"Successfully encrypted to {output_path}")
+
+    except Exception as e:
+        # 3. CLEANUP: If anything fails, delete the partial temp file
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        print(f"Error: {e}")
+        raise e
+```
+
+### Key Technical Details:
+
+1.  **`os.replace()` vs `os.rename()`:** In Python, `os.replace()` is the preferred method because it is cross-platform and will overwrite the destination if it exists, acting as a true atomic swap on POSIX systems.
+2.  **`os.fsync()`:** This is critical. `file.write()` and `file.flush()` only push data to the OS buffer. If the computer loses power a millisecond after the script finishes, the data might still be in RAM. `os.fsync()` forces the OS to actually write the bytes to the physical platter/SSD.
+3.  **The Partition Trap:** You **must** create the temp file in the same directory as the final file. If the temp file is in `/tmp` (on the root partition) and the output is in `/home/user/secrets` (on a different partition), the OS cannot do an atomic rename; it has to copy the file, which defeats the entire purpose.
+
+### Summary of the "Safety Guard"
+| Scenario | Without this pattern | With "Write-and-Rename" |
+| :--- | :--- | :--- |
+| **User hits Ctrl+C** | Leaves a corrupted `File.cesvu`. | Leaves a hidden `.tmp` file; no result file created. |
+| **System Crash** | Corrupted file on disk. | Temporary file remains; result file never exists. |
+| **Disk Full** | Corrupted file on disk. | Error thrown; temp file deleted; no result file created. |
+| **Successful Run** | Result file created. | Result file created atomically. |

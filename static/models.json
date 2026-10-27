@@ -1,0 +1,102 @@
+{
+  "version": "1.0.0",
+  "updated_at": "2026-06-23T04:40:05.218Z",
+  "entries": [
+    {
+      "kind": "model",
+      "id": "smollm2-q4",
+      "baseUrl": "https://ai.cesvu.com/smollm2-1.7b-instruct/v1",
+      "file": "model_q4.onnx",
+      "sha256": "467b7b8f62d99f184d3628d24b8d65c151e331695f6e9ea997616c4e279e9a51",
+      "lfs_oid": "467b7b8f62d99f184d3628d24b8d65c151e331695f6e9ea997616c4e279e9a51",
+      "size": 1411969607,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T03:03:20.649Z",
+      "source": "https://huggingface.co/HuggingFaceTB/SmolLM2-1.7B-Instruct/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "smollm3-q4-onnx",
+      "baseUrl": "https://ai.cesvu.com/smollm3-3b/v1",
+      "file": "model_q4.onnx",
+      "sha256": "bbb931d4f86cd3159af7de66a591b2263acccf80eb938c05dd89fff22baf051d",
+      "lfs_oid": "bbb931d4f86cd3159af7de66a591b2263acccf80eb938c05dd89fff22baf051d",
+      "size": 300023,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T03:15:00.365Z",
+      "source": "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "smollm3-q4-data",
+      "baseUrl": "https://ai.cesvu.com/smollm3-3b/v1",
+      "file": "model_q4.onnx_data",
+      "sha256": "0f0210cbef6a3eea54d19adff2d25e1626bce4ae5f22c34b9bd3067b1417a488",
+      "lfs_oid": "0f0210cbef6a3eea54d19adff2d25e1626bce4ae5f22c34b9bd3067b1417a488",
+      "size": 2842501120,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T03:15:00.365Z",
+      "source": "https://huggingface.co/HuggingFaceTB/SmolLM3-3B-ONNX/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "olmo3-q4-onnx",
+      "baseUrl": "https://ai.cesvu.com/olmo-3-7b-instruct/v1",
+      "file": "model_q4.onnx",
+      "sha256": "b84a33e314a2a0ac7e9a0345047beb1a84f131978dcc58dc8593c5998980daee",
+      "lfs_oid": "b84a33e314a2a0ac7e9a0345047beb1a84f131978dcc58dc8593c5998980daee",
+      "size": 363850,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T04:32:17.950Z",
+      "source": "https://huggingface.co/onnx-community/Olmo-3-7B-Instruct-ONNX/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "olmo3-q4-data-1",
+      "baseUrl": "https://ai.cesvu.com/olmo-3-7b-instruct/v1",
+      "file": "model_q4.onnx_data",
+      "sha256": "881451b57726b3eda20f9a2f03dc2edee17287224b7311f11155e09941925971",
+      "lfs_oid": "881451b57726b3eda20f9a2f03dc2edee17287224b7311f11155e09941925971",
+      "size": 2096617056,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T04:32:17.950Z",
+      "source": "https://huggingface.co/onnx-community/Olmo-3-7B-Instruct-ONNX/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "olmo3-q4-data-2",
+      "baseUrl": "https://ai.cesvu.com/olmo-3-7b-instruct/v1",
+      "file": "model_q4.onnx_data_1",
+      "sha256": "e78bc82239d56f6e91dc959539bba406e79c9cef05eccf32767b184308f2e394",
+      "lfs_oid": "e78bc82239d56f6e91dc959539bba406e79c9cef05eccf32767b184308f2e394",
+      "size": 1844344416,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T04:32:17.950Z",
+      "source": "https://huggingface.co/onnx-community/Olmo-3-7B-Instruct-ONNX/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "classifier-onnx",
+      "baseUrl": "https://ai.cesvu.com/legal-clause-classifier/v1",
+      "file": "model.onnx",
+      "sha256": "c8773e7b69bdf223ec87a9ea1f802f0ee850b1db94e6132fd146d5f890ae8332",
+      "lfs_oid": "c8773e7b69bdf223ec87a9ea1f802f0ee850b1db94e6132fd146d5f890ae8332",
+      "size": 140441359,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T04:32:43.414Z",
+      "source": "https://huggingface.co/teimurjan/legal-clause-classifier/resolve/main/onnx/"
+    },
+    {
+      "kind": "model",
+      "id": "classifier-data",
+      "baseUrl": "https://ai.cesvu.com/legal-clause-classifier/v1",
+      "file": "model.onnx.data",
+      "sha256": "21306edf93026c6de42b2a727db424ff80197865ae314e07a53a5d6b0454c133",
+      "lfs_oid": "21306edf93026c6de42b2a727db424ff80197865ae314e07a53a5d6b0454c133",
+      "size": 140365824,
+      "contentType": "application/octet-stream",
+      "pinned_at": "2026-06-23T04:32:43.414Z",
+      "source": "https://huggingface.co/teimurjan/legal-clause-classifier/resolve/main/onnx/"
+    }
+  ]
+}

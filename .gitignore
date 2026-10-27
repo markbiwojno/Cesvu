@@ -1,0 +1,25 @@
+.svelte-kit/
+.vite/
+node_modules/
+
+node_modules/
+.svelte-kit/
+
+build/
+dist/
+
+.env
+.env.*
+
+*.log
+
+my stuff/
+tests/
+scripts/r2-uploads
+compliance whitepaper/
+dicom/
+
+CLI/cesvu/src/cesvu/__pycache__/*.pyc
+
+manual_dicom_test/
+logotest

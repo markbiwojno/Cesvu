@@ -1,0 +1,191 @@
+Metadata-Version: 2.4
+Name: cesvu
+Version: 0.1.0
+Summary: cesvu CLI — encrypt/decrypt .cesvu v1 files (zero-knowledge, libsodium-backed)
+Author: Gigperfect LLC
+License-Expression: Apache-2.0
+Requires-Python: >=3.9
+Description-Content-Type: text/markdown
+License-File: src/cesvu/LICENSE.txt
+License-File: src/cesvu/NOTICE.txt
+License-File: src/cesvu/licenses/THIRD_PARTY_LICENSES.txt
+Requires-Dist: pynacl>=1.5.0
+Requires-Dist: tqdm>=4.66.0
+Dynamic: license-file
+
+# cesvu CLI
+
+Encrypt/decrypt `.cesvu` v1 files from the command line — a
+zero-knowledge, libsodium-backed format compatible with the
+[cesvu.com](https://cesvu.com) web app.
+
+See `../../.cesvu SPEC/README.md` for the wire format both implementations share.
+
+## Install (editable, for development)
+
+```
+pip install -e .
+```
+
+## Usage
+
+```
+cesvu encrypt path/to/File.txt
+cesvu encrypt path/to/File.txt --diceware
+cesvu encrypt path/to/File.txt --emoji
+cesvu encrypt path/to/File.txt -p "my custom password"
+
+cesvu decrypt path/to/File.txt.cesvu
+cesvu decrypt path/to/File.txt.cesvu -p "my custom password"
+```
+
+### Viewer vs. download: `.txt`/`.md`/`.csv` open in the cesvu.com viewer by default
+
+When you encrypt a file whose extension is `.txt`, `.md`, or `.csv`, `cesvu
+encrypt` wraps it in the same document framing the web app's own **Export**
+button produces. The result opens directly in the [cesvu.com](https://cesvu.com)
+viewer when imported there — not just downloaded as a plain file.
+
+Every other file type (`.pdf`, `.docx`, `.xlsx`, images, `.zip`, etc.) is
+unaffected by this and always encrypts as a plain file the recipient
+downloads, exactly as before — those formats need real parsing/extraction to
+populate the viewer's document fields, which isn't implemented in this CLI
+(only in the browser itself).
+
+Pass `--download` to opt a `.txt`/`.md`/`.csv` file out of this and force the
+old plain-file behavior instead (the recipient always gets a download, never
+the in-app viewer):
+
+```
+cesvu encrypt notes.txt              # opens in the cesvu.com viewer
+cesvu encrypt notes.txt --download   # always downloads, viewer not used
+```
+
+`--download` has no effect on file types that already always download
+(e.g. `.pdf`, `.zip`) — there's nothing for it to opt out of there.
+
+#### Per-type fidelity: matches what the browser would have produced
+
+Each auto-framed type mirrors exactly what cesvu.com's own upload/export
+flow does for the same file, not just its raw bytes:
+
+- **`.txt`** — the file's UTF-8 text (BOM stripped), trimmed of leading/
+  trailing whitespace. Unicode (including emoji) is preserved as literal
+  characters, not escaped.
+- **`.md`** — the markdown is **stripped to plain text** (headings, bold/
+  italic, links, code fences, lists, etc. removed) before being stored,
+  matching the web app's own markdown parser. The viewer uses this plain
+  text for reading/notes, the same as an in-browser upload would.
+- **`.csv`** — the raw CSV bytes travel through unmodified (any encoding —
+  they are never decoded as UTF-8), so the cesvu.com viewer reconstructs
+  the full interactive table exactly as if the CSV had been uploaded
+  directly in the browser, instead of showing a blank/empty view.
+
+#### `cesvu decrypt` automatically unwraps this framing back to plain content
+
+Decrypting a `.txt`/`.md`/`.csv` file that was encrypted with this document
+framing writes out just the underlying content — the plain text or CSV
+rows — not the internal CFP1 envelope (magic bytes + JSON metadata) that
+carries it. For example, decrypting an emoji passphrase saved as
+`password.txt` produces a file containing only the emoji, exactly as
+originally written — never the surrounding
+`{"id": ..., "sourceType": "txt", "text": "...", ...}` JSON.
+
+This detection is intentionally conservative: it requires the CFP1 magic
+bytes, a length field that fits the actual decrypted data, and JSON that
+parses into the expected document shape, all at once, before unwrapping
+anything. Any file that doesn't meet every one of those checks — including
+a `--download`-forced file, any other file type, or a file that merely
+happens to start with the same 4 magic bytes — is written out exactly as
+decrypted, unchanged.
+
+
+### Emoji passphrases: use `--password-file`, not `-p`, on the console
+
+
+
+Typing or pasting an emoji passphrase directly into a terminal — especially
+Windows' `cmd.exe`/PowerShell consoles — can silently corrupt it (emoji are
+outside the Basic Multilingual Plane and get mangled into invalid lone
+UTF-16 surrogate characters, which then fail with a `UnicodeEncodeError`
+when the tool tries to derive a key from them). To avoid this entirely,
+save the passphrase to a UTF-8 text file and pass it with `--password-file`:
+
+```
+cesvu encrypt path/to/File.txt --emoji
+cesvu decrypt path/to/File.txt.cesvu --password-file emoji-passphrase.txt
+```
+
+If a passphrase supplied via `-p` or the interactive prompt is detected to
+contain invalid/corrupted characters, `cesvu` fails with a clear error
+message pointing you at `--password-file` instead of a raw traceback.
+
+**`cesvu decrypt` automatically detects when a file requires an emoji
+passphrase** (`passProfile = Pass_Profile_Emoji` in the file's header) and
+adapts its behavior accordingly — **on Windows only** (`sys.platform ==
+"win32"`), since this corruption is essentially specific to `cmd.exe`/
+PowerShell's default non-UTF-8 console code page. Linux/macOS terminals
+are overwhelmingly UTF-8 by default, so `-p` and the normal interactive
+prompt are left available there as usual:
+
+- **On Windows**, `-p`/`--password` is disallowed for emoji-profile files
+  and fails immediately with a clear error, since there's no safe way to
+  pass emoji through that flag from a default Windows console. If no `-p`,
+  `--password-file`, or `CESVU_PASSPHRASE` env var is given, `cesvu`
+  will **not** fall back to the normal (`getpass`) interactive prompt for
+  these files — instead it prints a short notice and asks you to enter the
+  **path to a UTF-8 text file** containing the emoji passphrase, then
+  reads it the same way `--password-file` does.
+- **On Linux/macOS**, `-p` and the normal interactive prompt work as usual
+  for emoji-profile files. If a passphrase still comes through corrupted
+  anyway (e.g. an unusual `LANG=C`/non-UTF-8 locale), the same
+  invalid-character check still catches it and reports a clear error
+  pointing you at `--password-file`, instead of an opaque
+  `UnicodeEncodeError`.
+- `--password-file` and `CESVU_PASSPHRASE` continue to work exactly the
+  same on every OS for emoji-profile files.
+
+
+
+
+### Preamble
+
+Every encrypted file carries the same canonical preamble text as the web
+app (a short notice shown before the passphrase prompt). There is no
+option to customize it — `cesvu encrypt` always writes `DEFAULT_PREAMBLE`
+verbatim, and `cesvu decrypt` does not read, display, or otherwise inspect
+whatever preamble text is present in a file's header (it's skipped as
+opaque bytes; only its declared length matters for locating the rest of
+the header).
+
+
+## License
+
+This CLI is distributed under the **Apache License, Version 2.0**. The
+full text ships inside the installed package at
+`<site-packages>/cesvu/LICENSE.txt` (a copy of the project's
+`LICENSE` file).
+
+The CLI depends on two direct packages — `pynacl` and `tqdm` — plus
+their transitive closure (`cffi`, `pycparser`, and so on). The full
+text of every upstream license that affects this distribution is
+bundled verbatim into the installed package at
+`<site-packages>/cesvu/licenses/THIRD_PARTY_LICENSES.txt`. A short
+top-level notice lives at `<site-packages>/cesvu/NOTICE.txt`.
+
+If you've cloned the repository and want to verify or rebuild the
+third-party notice from your local pip environment (for example, after
+upgrading a dep), see
+[`REGENERATING_THIRD_PARTY_NOTICES.txt`](REGENERATING_THIRD_PARTY_NOTICES.txt).
+
+## Trademarks
+
+"Cesvu" and its logo are trademarks of Gigperfect LLC and are not
+covered by the Apache 2.0 license above. The full policy — including
+which compatibility statements (e.g. "reads `.cesvu` files") are
+explicitly permitted — ships inside the installed package at
+`<site-packages>/cesvu/TRADEMARKS.txt`.
+
+
+
+

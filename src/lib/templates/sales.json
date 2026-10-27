@@ -1,0 +1,54 @@
+{
+  "id": "sales",
+  "name": "Sales Analysis",
+  "description": "Pipeline, conversion, cohort analysis, and channel performance",
+  "icon": "📈",
+  "tier": "free",
+  "fileTypes": ["csv", "pdf", "docx"],
+  "bestFor": ["csv", "pdf", "docx"],
+  "sections": [
+    {
+      "id": "performance_summary",
+      "type": "summary",
+      "title": "Performance Summary",
+      "description": "Overall sales performance snapshot",
+      "required": true
+    },
+    {
+      "id": "top_performers",
+      "type": "insights",
+      "title": "Top Performers & Drivers",
+      "description": "What is working and why",
+      "required": true
+    },
+    {
+      "id": "underperformance",
+      "type": "anomalies",
+      "title": "Underperformance & Bottlenecks",
+      "description": "Where performance is lagging and likely causes",
+      "required": true
+    },
+    {
+      "id": "cohort_behavior",
+      "type": "markdown",
+      "title": "Cohort & Segment Behavior",
+      "description": "How different customer segments or time cohorts perform",
+      "required": false
+    },
+    {
+      "id": "channel_performance",
+      "type": "insights",
+      "title": "Channel Performance",
+      "description": "Performance breakdown by sales channel or source",
+      "required": false
+    },
+    {
+      "id": "recommendations",
+      "type": "insights",
+      "title": "Top 3 Recommendations",
+      "description": "Specific, data-backed actions to improve performance",
+      "required": true
+    }
+  ],
+  "systemPrompt": "You are a sales analytics expert. Analyze the provided sales data and identify performance patterns, drivers of success, bottlenecks, and opportunities. Every recommendation must be tied to specific data points. Focus on what is actionable in the next 30 days.\n\nRespond with a JSON object with these keys: performance_summary (string), top_performers (array of strings), underperformance (array of strings), cohort_behavior (string), channel_performance (array of strings), recommendations (array of exactly 3 strings, each starting with an action verb)."
+}

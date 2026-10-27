@@ -1,0 +1,6 @@
+```shell
+pip install -e "C:\Users\mark\Projects\cesvu\CLI\cesvu" --quiet --no-deps
+```
+
+```
+```
