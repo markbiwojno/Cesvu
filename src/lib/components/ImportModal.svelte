@@ -136,49 +136,43 @@
 			</button>
 		</div>
 	{:else if phase === 'success' && openedDoc}
-		<div class="flex flex-col items-center justify-center gap-3 py-8 text-center">
-			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40 text-2xl">
-				✓
+		<!-- Top half: confirmation + file details. Bottom half: a single,
+		     dominant "View file" action. No separate Cancel button — the
+		     header ✕ (and backdrop click / Escape) is the only way to
+		     dismiss without opening, handled by Modal's dismissible logic. -->
+		<div class="flex min-h-[55vh] flex-col">
+			<div class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+				<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40 text-2xl">
+					✓
+				</div>
+				<p class="text-sm font-medium text-gray-900 dark:text-white">File opened.</p>
+				<p class="text-xs text-gray-500 dark:text-gray-400">
+					{openedDoc.name} · {formatBytes(decodedByteSize(openedDoc))}
+				</p>
+
+				<button
+					onclick={() => (showFileInfo = !showFileInfo)}
+					class="text-xs font-medium text-blue-700 transition-colors hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+				>
+					More options
+				</button>
+
+				{#if showFileInfo}
+					<button
+						onclick={downloadDecoded}
+						class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
+					>
+						Download file
+					</button>
+				{/if}
 			</div>
-			<p class="text-sm font-medium text-gray-900 dark:text-white">File opened.</p>
-			<p class="text-xs text-gray-500 dark:text-gray-400">
-				{openedDoc.name} · {formatBytes(decodedByteSize(openedDoc))}
-			</p>
 
 			<button
-				onclick={() => (showFileInfo = !showFileInfo)}
-				class="text-xs font-medium text-blue-700 transition-colors hover:text-blue-600 dark:text-blue-400 dark:hover:text-blue-300"
+				onclick={viewFile}
+				class="flex flex-1 items-center justify-center rounded-xl bg-blue-700 text-lg font-semibold text-white transition-colors hover:bg-blue-600"
 			>
-				More options
+				View file
 			</button>
-
-			{#if showFileInfo}
-				<button
-					onclick={downloadDecoded}
-					class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
-				>
-					Download file
-				</button>
-			{/if}
 		</div>
 	{/if}
-
-	{#snippet footer()}
-		{#if phase === 'success'}
-			<div class="flex justify-end gap-2">
-				<button
-					onclick={handleClose}
-					class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200"
-				>
-					Cancel
-				</button>
-				<button
-					onclick={viewFile}
-					class="rounded-lg bg-blue-700 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-600"
-				>
-					View file
-				</button>
-			</div>
-		{/if}
-	{/snippet}
 </Modal>
