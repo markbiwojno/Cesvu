@@ -20,9 +20,8 @@
  *                    offline; no HF Hub, no jsDelivr.
  *
  * Crypto:
- *   Uses @noble/hashes (sha256, sha384) — same audited library family as the rest
- *   of the project (Argon2id, HKDF, etc.). No node:crypto, no GPG, no openssl. Pure
- *   JavaScript, runs identically on Windows / macOS / Linux.
+ *   Uses node:crypto's createHash('sha256'/'sha384') — Node's built-in digest
+ *   implementation, no third-party dependency. No GPG, no openssl.
  *
  * Output (dist/integrity.json), current schema:
  *   {
@@ -46,9 +45,7 @@ import { readdir, readFile, writeFile, stat } from 'node:fs/promises';
 import { join, relative, sep, posix, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { sha256, sha384 } from '@noble/hashes/sha2.js';
-
-import { bytesToHex } from '@noble/hashes/utils.js';
+import { createHash } from 'node:crypto';
 
 // Anchor every project-root-relative path to THIS SCRIPT'S location, not the
 // process cwd. This way the script works no matter where it is invoked from
@@ -121,8 +118,8 @@ async function walkHtml(root) {
 async function hashFileFull(absPath) {
 	const buf = await readFile(absPath);
 	return {
-		sha256: bytesToHex(sha256(buf)),
-		sha384: bytesToHex(sha384(buf)),
+		sha256: createHash('sha256').update(buf).digest('hex'),
+		sha384: createHash('sha384').update(buf).digest('hex'),
 		size: buf.byteLength
 	};
 }
@@ -133,7 +130,7 @@ async function hashFileFull(absPath) {
  */
 async function hashFile(absPath) {
 	const buf = await readFile(absPath);
-	return bytesToHex(sha256(buf));
+	return createHash('sha256').update(buf).digest('hex');
 }
 
 /**
@@ -186,7 +183,7 @@ async function freezeCommand() {
 
 	console.log(`[freeze] Walking ${root}/…`);
 	const files = await walkFiles(root);
-	console.log(`[freeze] Found ${files.length} files. Hashing with SHA-256 + SHA-384 via @noble/hashes…`);
+	console.log(`[freeze] Found ${files.length} files. Hashing with SHA-256 + SHA-384 via node:crypto…`);
 
 	const entries = {};
 	let count = 0;

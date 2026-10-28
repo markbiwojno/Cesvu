@@ -4,7 +4,7 @@
  *
  * For each manifest in scripts/r2-uploads/manifests/:
  *   1. For each file in the manifest, download from the source URL.
- *   2. Compute sha256 + size using @noble/hashes (same primitive freeze.mjs uses).
+ *   2. Compute sha256 + size using node:crypto (same primitive freeze.mjs uses).
  *   3. Update the manifest in-place with real values.
  *
  * LFS HANDLING:
@@ -44,9 +44,6 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-
-import { sha256 } from '@noble/hashes/sha2.js';
-import { bytesToHex } from '@noble/hashes/utils.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const SCRIPT_DIR = dirname(__filename);
@@ -136,7 +133,7 @@ function requireWranglerReady(bucket) {
 }
 
 // ============================================================
-// Download with streaming + LFS detection + @noble/hashes
+// Download with streaming + LFS detection + node:crypto hashing
 // ============================================================
 
 const LFS_PROBE_THRESHOLD_BYTES = 10_000;
@@ -248,7 +245,7 @@ async function downloadFile(fileUrl, destPath, opts = {}) {
 		}
 
 		await writeFile(destPath, buf);
-		const sha = bytesToHex(sha256(buf));
+		const sha = createHash('sha256').update(buf).digest('hex');
 		if (expectedSha256 && expectedSha256 !== sha) {
 			throw new Error(
 				`sha256 mismatch for ${fileLabel}\n` +
@@ -266,15 +263,13 @@ async function downloadFile(fileUrl, destPath, opts = {}) {
 	}
 
 	// ── Large response — stream to disk, hash as we go ────────────────
-	// The previous implementation read the whole file back into a Buffer after
-	// the download and hashed it with @noble/hashes. That works for files < 2 GiB
-	// but Node Buffers are capped at ~2 GiB (kMaxLength), so anything bigger
-	// (e.g. SmolLM3-3B's 2.84 GB model_q4.onnx_data) throws
-	// "File size (...) is greater than 2 GiB".
+	// Reading the whole file back into a Buffer after the download (as the
+	// small-file path above does) works for files < 2 GiB, but Node Buffers
+	// are capped at ~2 GiB (kMaxLength), so anything bigger (e.g. SmolLM3-3B's
+	// 2.84 GB model_q4.onnx_data) throws "File size (...) is greater than 2 GiB".
 	//
 	// Fix: hash during the stream, using Node's createHash('sha256') which is
-	// unbounded. SHA-256 is SHA-256; the output hex is identical to @noble/hashes.
-	// Net result: same pin, no 2 GiB cap, no extra read pass.
+	// unbounded. Net result: same pin, no 2 GiB cap, no extra read pass.
 	//
 	// LFS oid verification: we don't get an in-band LFS pointer for large
 	// files, so query the HF API for the public hash before downloading.
