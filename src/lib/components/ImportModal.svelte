@@ -15,7 +15,7 @@
 	 */
 	import { onMount } from 'svelte';
 	import Modal from '$lib/components/common/Modal.svelte';
-	import { importFromCesvu, deleteDocument } from '$lib/stores/contract-store.svelte.js';
+	import { importFromCesvu } from '$lib/stores/contract-store.svelte.js';
 	import type { CesvuDocument } from '$lib/schema.js';
 
 	interface Props {
@@ -93,24 +93,21 @@
 			const doc = await importFromCesvu(file);
 			openedDoc = doc;
 			phase = 'success';
+			// The document is materialized into the workspace IMMEDIATELY on a
+			// successful open — not deferred to "View file" — so it's already
+			// live behind this modal by the time the success screen shows.
+			// "View file" (and closing the modal any other way: ✕, backdrop,
+			// Escape) all just reveal it; none of them should ever delete it.
+			onimported(doc);
 		} catch (e) {
 			error = e instanceof Error ? e.message : 'Unable to open this file.';
 			phase = 'error';
 		}
 	}
 
+	/** The document is already open behind this modal (onimported(doc)
+	 *  already fired in open()) — closing just reveals it. */
 	function viewFile() {
-		if (!openedDoc) return;
-		onimported(openedDoc);
-	}
-
-	/** If the user dismisses the success screen WITHOUT clicking "View
-	 *  file", the ephemeral record we created has no other owner — delete
-	 *  it so it doesn't linger as an orphaned entry in the in-memory store. */
-	function handleClose() {
-		if (phase === 'success' && openedDoc) {
-			void deleteDocument(openedDoc.id);
-		}
 		onclose();
 	}
 
@@ -119,7 +116,7 @@
 	});
 </script>
 
-<Modal open={true} title="Open document" onclose={handleClose} dismissible={phase !== 'opening'}>
+<Modal open={true} title="Open document" {onclose} dismissible={phase !== 'opening'}>
 	{#if phase === 'input' || phase === 'opening'}
 		<div class="flex flex-col items-center justify-center gap-3 py-10 text-center">
 			<div class="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 dark:border-slate-700 border-t-blue-500"></div>
@@ -136,12 +133,13 @@
 			</button>
 		</div>
 	{:else if phase === 'success' && openedDoc}
-		<!-- Top half: confirmation + file details. Bottom half: a single,
-		     dominant "View file" action. No separate Cancel button — the
+		<!-- Wide, but compact — the success details sit above a single,
+		     prominent "View file" button sized to its own content (not a
+		     fraction of the viewport). No separate Cancel button — the
 		     header ✕ (and backdrop click / Escape) is the only way to
 		     dismiss without opening, handled by Modal's dismissible logic. -->
-		<div class="flex min-h-[55vh] flex-col">
-			<div class="flex flex-1 flex-col items-center justify-center gap-3 text-center">
+		<div class="flex flex-col gap-5 py-2">
+			<div class="flex flex-col items-center gap-3 text-center">
 				<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40 text-2xl">
 					✓
 				</div>
@@ -169,7 +167,7 @@
 
 			<button
 				onclick={viewFile}
-				class="flex flex-1 items-center justify-center rounded-xl bg-blue-700 text-lg font-semibold text-white transition-colors hover:bg-blue-600"
+				class="flex items-center justify-center rounded-xl bg-blue-700 py-4 text-base font-semibold text-white transition-colors hover:bg-blue-600"
 			>
 				View file
 			</button>
