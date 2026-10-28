@@ -1,7 +1,6 @@
 <script lang="ts">
 	/**
-	 * ExportModal.svelte — turn a saved document into a portable, plain
-	 * (unencrypted) .cesvu file.
+	 * ExportModal.svelte — turn a saved document into a portable .cesvu file.
 	 *
 	 * Flow:
 	 *   1. "options" — the sender chooses whether the ORIGINAL SOURCE FILE is
@@ -12,9 +11,9 @@
 	 *      interactive table (we say so). TXT/MD have no separate source, so the
 	 *      step is skipped entirely (goes straight to "generating").
 	 *   2. "generating" — build the plain, checksummed .cesvu file (see
-	 *      exportAsCesvu). No passphrase is generated or shown — this build's
-	 *      .cesvu export carries a SHA-256 integrity checksum only, not
-	 *      confidentiality (see cesvu-crypto.ts's top doc comment).
+	 *      exportAsCesvu). The .cesvu export carries a SHA-256 integrity
+	 *      checksum only, not confidentiality (see cesvu-export.ts's top doc
+	 *      comment).
 	 *   3. "sharing" / "done" — the file is ready to share (Web Share API) or
 	 *      has already downloaded.
 	 */

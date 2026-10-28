@@ -1,41 +1,26 @@
 /**
- * src/lib/crypto/cesvu-crypto.ts — Plain (unencrypted) export/import of a
- * {@link CesvuDocument} as a self-describing `.cesvu` binary file.
+ * src/lib/export/cesvu-export.ts — Export/import of a {@link CesvuDocument}
+ * as a self-describing `.cesvu` binary file.
  *
- * ── Why this file no longer encrypts anything ───────────────────────────
- * The web app's `.cesvu` export used to be a zero-knowledge encrypted
- * envelope (Argon2id KDF + XChaCha20-Poly1305 secretstream, via
- * libsodium-wrappers-sumo). That has been intentionally removed from the
- * WEB APP ONLY — the Python CLI (`CLI/cesvu/`) and the Node.js package
- * (`NPM/`) are untouched and remain fully encrypted, mutually compatible
- * with each other, and conformant with `.cesvu SPEC/README.md`. A file
- * produced by THIS module is therefore NOT a conforming `.cesvu` v1
- * envelope and will not open in the CLI/NPM package (and vice versa) —
- * it is a distinct, plain container that happens to reuse the same
- * outer magic/extension for continuity with the rest of the product.
- *
- * ── What this format actually provides ──────────────────────────────────
- * NO confidentiality. Anyone who has the file can read its contents —
- * there is no passphrase, no key, no encryption of any kind. What IS
- * provided is INTEGRITY: a SHA-256 checksum over the payload lets a
- * reader detect accidental corruption or truncation (e.g. a bad
- * download, a flaky USB drive, a copy interrupted mid-transfer). It is
- * NOT a security boundary — a deliberate attacker can trivially edit the
- * payload and recompute a matching checksum, since nothing is keyed or
- * secret. Do not represent this format as tamper-evident against a
- * motivated adversary; it only guards against accidental bit-rot.
+ * ── What this format provides ─────────────────────────────────────────────
+ * This module builds and parses a plain `.cesvu` container with no
+ * confidentiality — anyone who has the file can read its contents. What IS
+ * provided is INTEGRITY: a SHA-256 checksum over the payload lets a reader
+ * detect accidental corruption or truncation (e.g. a bad download, a flaky
+ * USB drive, a copy interrupted mid-transfer). It is NOT a security
+ * boundary — a deliberate attacker can trivially edit the payload and
+ * recompute a matching checksum, since nothing is keyed or secret. Do not
+ * represent this format as tamper-evident against a motivated adversary;
+ * it only guards against accidental bit-rot.
  *
  * ── Format ───────────────────────────────────────────────────────────────
  *   offset   size  field
- *   0        6     magic — '.CESVU' (kept for continuity with the prior
- *                  encrypted format's extension/branding; NOT the same
- *                  wire format — see the version field below to tell them
- *                  apart programmatically)
- *   6        2     version — uint16 BE. This plain format uses version 2
- *                  (version 1 was the encrypted envelope). A reader MUST
- *                  reject version 1 with UNSUPPORTED_VERSION rather than
- *                  attempt to parse it as plain — it is a different format
- *                  entirely, not an older revision of this one.
+ *   0        6     magic — '.CESVU'
+ *   6        2     version — uint16 BE. This format uses version 2. A
+ *                  reader encountering a different version (e.g. v1, a
+ *                  distinct file format this build does not read) MUST
+ *                  reject it with UNSUPPORTED_VERSION rather than attempt
+ *                  to parse it as v2.
  *   8        2     preambleLen — uint16 BE, length in bytes of the
  *                  human-readable preamble that follows
  *   10       P     preamble — UTF-8 plain text, exactly `preambleLen`
@@ -67,18 +52,13 @@ const _decoder = new TextDecoder();
 
 // ── Public constants ──────────────────────────────────────────────────
 
-/** Six ASCII bytes. Bytes 0–5 of every .cesvu file (plain or, historically,
- *  encrypted — see this file's top doc comment for why the magic is shared
- *  but the formats are not interchangeable). */
+/** Six ASCII bytes. Bytes 0–5 of every .cesvu file. */
 export const MAGIC = _encoder.encode('.CESVU');
 
 /**
- * Current envelope version. Bytes 6–7 (uint16 BE).
- *
- * v1 was the removed encrypted envelope (XChaCha20-Poly1305 secretstream —
- * still used by the CLI/NPM package). v2 is this plain, checksummed
- * format. A reader encountering v1 here MUST reject it with
- * UNSUPPORTED_VERSION rather than parse it as plain.
+ * Current format version. Bytes 6–7 (uint16 BE). A reader encountering a
+ * different version MUST reject it with UNSUPPORTED_VERSION rather than
+ * attempt to parse it under this version's layout.
  */
 export const VERSION = 2 as const;
 
@@ -258,8 +238,9 @@ export interface ParsedCesvuFile {
 	metadata: CesvuMetadata;
 	/** The human-readable preamble banner (see {@link DEFAULT_PREAMBLE}). */
 	preamble: string;
-	/** The CFP1-framed payload — pass to the same parser that previously
-	 *  consumed from the removed `decryptCesvu`'s `plaintext`. */
+	/** The CFP1-framed payload — pass to the parser that consumes a
+	 *  document's framed plaintext (see contract-store.svelte.ts's
+	 *  `importFromCesvu`). */
 	payload: Uint8Array;
 }
 
@@ -283,9 +264,7 @@ export async function parseCesvuFile(bytes: Uint8Array): Promise<ParsedCesvuFile
 	if (version !== VERSION) {
 		throw new CesvuError(
 			'UNSUPPORTED_VERSION',
-			version === 1
-				? 'This .cesvu file is encrypted (v1). This build only opens plain (unencrypted) .cesvu files — use the CLI or NPM package to decrypt it instead.'
-				: 'This file needs a newer version of Cesvu.'
+			`This file is v${version}. Use another build of Cesvu that supports v${version} files.`
 		);
 	}
 	const preambleLen = dv.getUint16(8, false);

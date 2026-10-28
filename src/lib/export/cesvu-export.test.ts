@@ -1,9 +1,9 @@
 /**
- * src/lib/crypto/cesvu-crypto.test.ts
+ * src/lib/export/cesvu-export.test.ts
  *
- * Round-trip and corruption-detection tests for the plain (unencrypted,
- * SHA-256-checksummed) `.cesvu` v2 container built by buildCesvuFile() /
- * parsed by parseCesvuFile().
+ * Round-trip and corruption-detection tests for the SHA-256-checksummed
+ * `.cesvu` v2 container built by buildCesvuFile() / parsed by
+ * parseCesvuFile().
  */
 
 import { describe, it, expect } from 'vitest';
@@ -16,7 +16,7 @@ import {
 	DEFAULT_PREAMBLE,
 	FIXED_PREFIX,
 	type CesvuMetadata
-} from './cesvu-crypto.js';
+} from './cesvu-export.js';
 
 function sampleMetadata(overrides: Partial<CesvuMetadata> = {}): CesvuMetadata {
 	return {
@@ -84,7 +84,7 @@ describe('buildCesvuFile / parseCesvuFile', () => {
 		await expect(parseCesvuFile(tooShort)).rejects.toMatchObject({ code: 'TOO_SHORT' });
 	});
 
-	it('rejects a v1 (formerly encrypted) file as UNSUPPORTED_VERSION', async () => {
+	it('rejects an unsupported version as UNSUPPORTED_VERSION', async () => {
 		const file = await buildCesvuFile(new Uint8Array([1, 2, 3]), sampleMetadata());
 		const dv = new DataView(file.buffer, file.byteOffset, file.byteLength);
 		dv.setUint16(6, 1, false);

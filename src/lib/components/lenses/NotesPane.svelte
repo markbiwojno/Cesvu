@@ -322,7 +322,7 @@
 	<!-- Footer hint -->
 	<div class="flex-shrink-0 border-t border-gray-200 dark:border-slate-800 px-4 py-2">
 		<p class="text-[10px] text-gray-400 dark:text-gray-600 text-center">
-			Notes stay on your device and travel inside the encrypted export.
+			Notes stay on your device and travel inside the export.
 		</p>
 	</div>
 </div>

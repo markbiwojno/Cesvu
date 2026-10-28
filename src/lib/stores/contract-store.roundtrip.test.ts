@@ -10,8 +10,8 @@
  * whitelist, so any field a newer peer wrote (or any field a future schema adds)
  * vanished the moment an older build re-imported and re-exported the document.
  *
- * The round-trip exercises the REAL plain `.cesvu` container (SHA-256
- * checksummed, see cesvu-crypto.ts), so it also incidentally proves
+ * The round-trip exercises the REAL `.cesvu` container (SHA-256
+ * checksummed, see cesvu-export.ts), so it also incidentally proves
  * build/parse agree on the wire format.
  */
 

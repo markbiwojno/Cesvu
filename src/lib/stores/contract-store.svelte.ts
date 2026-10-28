@@ -13,9 +13,8 @@
  * durable, portable form). NO IndexedDB, NO localStorage, NO sync, NO
  * migrations.
  *
- * NOTE: the `.cesvu` export produced by this build is PLAIN (unencrypted) —
- * see cesvu-crypto.ts's top doc comment. It carries a SHA-256 integrity
- * checksum only, not confidentiality.
+ * NOTE: the `.cesvu` export carries a SHA-256 integrity checksum only, not
+ * confidentiality — see cesvu-export.ts's top doc comment.
  *
  * MEMORY NOTES:
  *   - The reactive `documentsStore` holds lightweight {@link DocumentSummary}
@@ -25,7 +24,7 @@
  *     instead of being duplicated into every Svelte subscriber's reactivity
  *     graph. Components that need the full record call {@link getDocument}.
  *   - Intermediates in import/export are explicitly nulled so the GC can
- *     reclaim decrypted bytes / decoded strings / parsed objects during await
+ *     reclaim decoded bytes / decoded strings / parsed objects during await
  *     gaps rather than keeping all four alive until function return.
  */
 
@@ -43,7 +42,7 @@ import {
 	buildCesvuFile,
 	parseCesvuFile,
 	CesvuError
-} from '$lib/crypto/cesvu-crypto.js';
+} from '$lib/export/cesvu-export.js';
 
 
 /**
@@ -285,9 +284,9 @@ async function buildExportPayload(
 }
 
 /**
- * Export a stored document as a portable, plain (unencrypted) `.cesvu`
- * file. See cesvu-crypto.ts's top doc comment: this carries a SHA-256
- * integrity checksum only, not confidentiality.
+ * Export a stored document as a portable `.cesvu` file. See
+ * cesvu-export.ts's top doc comment: this carries a SHA-256 integrity
+ * checksum only, not confidentiality.
  *
  * `options.includeSource` controls whether the original file bytes
  * (`rawContent`, base64 of the source PDF/DOCX/CSV/XLSX) are written into
