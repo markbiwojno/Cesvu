@@ -32,6 +32,8 @@ import { tick } from 'svelte';
 	import type { ColumnProfile } from '$lib/types.js';
 import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter.js';
 	import { matchesValue } from '$lib/pipeline/valueMatch.js';
+	import { ROW_HEIGHT, keyScrollTarget } from './spreadsheet-scroll.js';
+	import { scrollLock } from '$lib/stores/scrollLock.svelte.js';
 
 
 
@@ -210,100 +212,30 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 	// Virtual scroll (ported from DocumentPane) — 200 rows in DOM
 	// ============================================================
 	const RENDER_SIZE = 240;
-	const ROW_HEIGHT = 28; // px — must match CSS
 	const OVERSCAN = 80;   // rows rendered above the viewport (absorbs scroll lag)
-	const MAX_SCROLL_PX = 50_000;
-
+	// ROW_HEIGHT and the exact-pixel scroll cap live in spreadsheet-scroll.ts.
+	// Every displayable sheet stays in EXACT pixel mode (1 row == ROW_HEIGHT px);
+	// the old 50,000px "proportional" mode decoded a jump's landing position as a
+	// wildly different row (jump to row 88, scroll, land near row 2,000).
 
 	let windowStart = $state(0);
-	// Live scrollTop — used to anchor the top spacer in proportional mode so the
-	// rendered rows always sit directly under the viewport (no black band).
-	let scrollTopPx = $state(0);
 
 	const totalBuffered = $derived(sortedRows.length);
 	const visibleRows = $derived(sortedRows.slice(windowStart, windowStart + RENDER_SIZE));
 
-	const exactScrollHeight = $derived(totalBuffered * ROW_HEIGHT);
-	const virtualHeight = $derived(Math.min(exactScrollHeight, MAX_SCROLL_PX));
-	const isProportional = $derived(exactScrollHeight > MAX_SCROLL_PX);
-
-	function scrollTopToRowIndex(scrollTop: number, containerHeight: number): number {
-		if (!isProportional) {
-			return Math.floor(scrollTop / ROW_HEIGHT);
-		}
-		const maxScrollTop = Math.max(1, virtualHeight - containerHeight);
-		const fraction = Math.min(1, scrollTop / maxScrollTop);
-		return Math.floor(fraction * (totalBuffered - 1));
+	function scrollTopToRowIndex(scrollTop: number): number {
+		return Math.floor(scrollTop / ROW_HEIGHT);
 	}
 
-	/** Inverse of scrollTopToRowIndex — the scrollTop that lands exactly on
-	 *  `rowIdx`. Used by the wheel handler below to move a precise row
-	 *  distance in PROPORTIONAL mode without ever going through a pixel
-	 *  delta (which is what let a normal scroll amplify into a huge row
-	 *  jump on big sheets — see handleWheel's doc comment). */
-	function rowIndexToScrollTop(rowIdx: number, containerHeight: number): number {
-		if (!isProportional) return rowIdx * ROW_HEIGHT;
-		const maxScrollTop = Math.max(1, virtualHeight - containerHeight);
-		const fraction = totalBuffered > 1 ? rowIdx / (totalBuffered - 1) : 0;
-		return Math.min(maxScrollTop, fraction * maxScrollTop);
+	function rowIndexToScrollTop(rowIdx: number): number {
+		return rowIdx * ROW_HEIGHT;
 	}
 
-	/**
-	 * Correct scrollTop to make `visualIdx` land at the TOP of the viewport,
-	 * given the already-clamped `windowStart` this row's jump landed on.
-	 *
-	 * The top spacer anchors to `scrollTopPx - overscanPx` (clamped to
-	 * [0, spacerMax] — see topSpacerPx below), which assumes the distance
-	 * between `windowStart` and `visualIdx` is exactly OVERSCAN rows. That
-	 * is only true in the UNCLAMPED middle of a sheet. Near the top,
-	 * `windowStart` clamps to 0 so the real distance is `visualIdx` (<
-	 * OVERSCAN); near the bottom it clamps to `totalBuffered - RENDER_SIZE`
-	 * so the real distance is > OVERSCAN. Blindly using the proportional
-	 * fraction formula (rowIndexToScrollTop) in those clamped regions — or
-	 * even just past them, since the fraction can still be SMALLER than
-	 * overscanPx on a huge sheet (e.g. row 500 of 500,000 rows) — produces a
-	 * scrollTop that disagrees with where the spacer/windowStart actually
-	 * puts the row, so the target ends up far outside the viewport (row 40
-	 * showing rows 2-20, row 500 showing rows 438-456).
-	 *
-	 * This derives the UNIQUE scrollTop that is self-consistent with the
-	 * spacer-clamp formula for each of the three possible regions:
-	 *   - D < OVERSCAN  → windowStart clamped to 0 (top): spacer is pinned to
-	 *     0, so scrollTop must equal D * ROW_HEIGHT (same as exact mode).
-	 *   - D > OVERSCAN  → windowStart clamped to the bottom: spacer is pinned
-	 *     to its max, so scrollTop = spacerMax + D * ROW_HEIGHT.
-	 *   - D === OVERSCAN → the normal, unclamped case. Any scrollTop whose
-	 *     spacer value lands strictly between 0 and spacerMax keeps the row
-	 *     at the viewport top, so we use the proportional fraction (for
-	 *     read-back consistency with wheel scrolling afterward) but CLAMP it
-	 *     into that valid band so it doesn't silently floor to the spacer's
-	 *     0 clamp on a huge sheet.
-	 */
-	function computeLandingScrollTop(visualIdx: number, windowStart: number, containerHeight: number): number {
-		if (!isProportional) return visualIdx * ROW_HEIGHT;
-		const d = visualIdx - windowStart;
-		const overscanPx = OVERSCAN * ROW_HEIGHT;
-		const spacerMax = Math.max(0, virtualHeight - RENDER_SIZE * ROW_HEIGHT);
-		if (d < OVERSCAN) return d * ROW_HEIGHT;
-		if (d > OVERSCAN) return spacerMax + d * ROW_HEIGHT;
-		const proportional = rowIndexToScrollTop(visualIdx, containerHeight);
-		return Math.min(overscanPx + spacerMax, Math.max(overscanPx, proportional));
-	}
-
-	// In proportional mode, anchor the top spacer to the LIVE scrollTop (minus the
-	// overscan rows rendered above the first visible row) instead of re-deriving a
-	// fraction from windowStart — the two never agree exactly, which left a black
-	// band at the top of the viewport after a fast scrollbar drag.
-	const overscanPx = OVERSCAN * ROW_HEIGHT;
-	const topSpacerPx = $derived(
-		!isProportional
-			? windowStart * ROW_HEIGHT
-			: Math.max(0, Math.min(scrollTopPx - overscanPx, virtualHeight - RENDER_SIZE * ROW_HEIGHT))
-	);
+	// Spacer rows stand in for the rows outside the rendered window, so the
+	// scroll height is exactly totalBuffered * ROW_HEIGHT.
+	const topSpacerPx = $derived(windowStart * ROW_HEIGHT);
 	const bottomSpacerPx = $derived(
-		!isProportional
-			? Math.max(0, (totalBuffered - windowStart - RENDER_SIZE) * ROW_HEIGHT)
-			: Math.max(0, virtualHeight - topSpacerPx - RENDER_SIZE * ROW_HEIGHT)
+		Math.max(0, (totalBuffered - windowStart - RENDER_SIZE) * ROW_HEIGHT)
 	);
 
 
@@ -316,10 +248,10 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 	let scrollEl: HTMLDivElement | null = null;
 	// Last horizontal scroll position. A scroll event whose scrollLeft changed is
 	// a SIDEWAYS scroll (horizontal scrollbar drag, shift-wheel, trackpad pan); we
-	// must not move the row window for it — in proportional mode even a 1px
-	// incidental vertical drift maps to many rows, so the rows "snapped far away"
-	// when the user only scrolled sideways. Starts at 0 (the initial DOM value) so
-	// a first PURE-vertical scroll isn't misread as horizontal.
+	// must not move the row window for it — incidental vertical drift during a
+	// sideways pan would otherwise shift the rendered rows. Starts at 0 (the
+	// initial DOM value) so a first PURE-vertical scroll isn't misread as
+	// horizontal.
 	let lastSeenScrollLeft = 0;
 	// One-shot guard used by note jumps. Programmatic scrollTop writes fire
 
@@ -332,29 +264,15 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 
 
 
-	// Single source of truth for "what row is the wheel handler currently
-	// on". Jumps (row-jump box, note-pin) set this to the EXACT target row
-	// directly — no formula involved. Native scroll (scrollbar drag,
-	// keyboard) updates it via the plain scrollTopToRowIndex formula below,
-	// which is self-consistent for that path. handleWheel reads AND writes
-	// this instead of re-deriving from scrollTop, because a jump's landing
-	// scrollTop is computed by computeLandingScrollTop — a BOUNDARY-AWARE
-	// formula that deliberately diverges from the plain scrollTopToRowIndex
-	// fraction in clamped regions (and whenever the natural fraction value
-	// is smaller than the overscan offset, which is common for any
-	// mid-sheet target on a huge sheet). Re-deriving "current row" from
-	// scrollTop via the plain formula right after such a jump decoded to a
-	// WILDLY different row than the one just landed on — e.g. jump to row
-	// 1000 decoded back to ~row 1900 — so the very first wheel tick computed
-	// its step from the wrong starting point and appeared to "jump" from
-	// 1000 to ~2000. Tracking the exact row explicitly avoids this mismatch.
+	// The row the wheel handler is currently on. Jumps (row-jump box, note pin)
+	// set it to the exact target row; native scroll (scrollbar drag, keyboard)
+	// updates it from scrollTop in applyScrollWindow. handleWheel steps from it
+	// instead of re-deriving the row from scrollTop.
 	let lastKnownRowIndex = 0;
 
 	function applyScrollWindow() {
 		if (!scrollEl) return;
-		// Record live scrollTop so the top spacer anchors to the real viewport.
-		scrollTopPx = scrollEl.scrollTop;
-		const rowIdx = scrollTopToRowIndex(scrollEl.scrollTop, scrollEl.clientHeight);
+		const rowIdx = scrollTopToRowIndex(scrollEl.scrollTop);
 		lastKnownRowIndex = rowIdx;
 		const desired = Math.max(0, rowIdx - OVERSCAN);
 		const clamped = Math.min(desired, Math.max(0, totalBuffered - RENDER_SIZE));
@@ -392,37 +310,25 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 	let gestureStartTime = 0;
 	let lastWheelEventTime = 0;
 	/**
-	 * Wheel scroll, throttled in BOTH proportional AND exact mode.
+	 * Wheel / trackpad scroll, throttled. The browser's native scroll has no
+	 * row-count awareness: a fast flick (plus its momentum tail) can cover
+	 * thousands of pixels, i.e. 1000+ rows, in one gesture. preventDefault()
+	 * stops the native scroll; we instead step the CURRENT row index by a
+	 * small, capped amount (further throttled by the gesture window above) and
+	 * convert it to an exact scrollTop, so even a fast, sustained swipe can
+	 * never move more than a bounded distance.
 	 *
-	 * Proportional mode: the virtual scroll height is capped at
-	 * MAX_SCROLL_PX, so scrollTopToRowIndex's fraction math maps a single
-	 * pixel of scrollTop to MANY rows once a sheet has hundreds of
-	 * thousands of rows — e.g. on a 500k-row sheet, 1px ≈ 10 rows. A normal
-	 * wheel/trackpad scroll's native pixel delta (never mind its momentum
-	 * tail) could therefore fling the view thousands of rows away from
-	 * where the user was looking — reported as "select row 800, then
-	 * scroll, and it jumps far away."
-	 *
-	 * Exact mode: 1 row is exactly ROW_HEIGHT px, so there's no fraction
-	 * amplification — but a fast wheel/trackpad flick can still cover
-	 * several thousand real pixels in one gesture, which at ROW_HEIGHT
-	 * px/row is still 1000+ rows ("can jump from row 1000 to 2000
-	 * instantly in the middle of a spreadsheet"). The native browser
-	 * scroll has no row-count awareness at all, so it needs the SAME
-	 * throttle as proportional mode, just without the fraction conversion.
-	 *
-	 * Fix: take over wheel scrolling entirely in both modes.
-	 * preventDefault() stops the browser's native (unthrottled) scroll
-	 * from running at all. We instead step the CURRENT row index by a
-	 * small, capped amount (further throttled by the rolling window
-	 * above) and convert that back to an exact scrollTop — so even a
-	 * fast, sustained swipe (many capped events firing in succession) can
-	 * never jump more than a bounded total distance, regardless of sheet
-	 * size or mode.
+	 * With the scroll lock ON (the default) vertical wheel input is ignored
+	 * entirely; the scrollbar, the Row box and the keyboard still work.
 	 */
 	function handleWheel(e: WheelEvent) {
 		if (!scrollEl || totalBuffered === 0) return;
 		if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // sideways — let it pass through natively
+
+		if (scrollLock.locked) {
+			e.preventDefault();
+			return;
+		}
 
 		// Deliberate wheel input always wins over a prior jump's scroll lock.
 		programmaticWindowStart = null;
@@ -453,13 +359,40 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 		const rowStep =
 			Math.sign(rawRows) * Math.min(MAX_WHEEL_ROW_STEP, Math.max(1, Math.round(Math.abs(rawRows))));
 
-		// Step from lastKnownRowIndex, NOT a fresh re-derivation via
-		// scrollTopToRowIndex(scrollEl.scrollTop, ...) — see its doc comment
-		// for why that round-trip disagrees with a jump's landing scrollTop.
+		// Step from lastKnownRowIndex (the exact row of the last jump or wheel
+		// step) rather than re-deriving it from scrollTop.
 		const targetRowIdx = Math.max(0, Math.min(lastKnownRowIndex + rowStep, totalBuffered - 1));
 		lastKnownRowIndex = targetRowIdx;
 
-		scrollEl.scrollTop = rowIndexToScrollTop(targetRowIdx, scrollEl.clientHeight);
+		scrollEl.scrollTop = rowIndexToScrollTop(targetRowIdx);
+	}
+
+	/**
+	 * Arrow / Page / Home / End navigation. Listens on the WINDOW so it works
+	 * whenever the user isn't typing, with no need for the table to hold focus
+	 * (jumping with the Row box leaves focus on <body>). Each key moves
+	 * scrollTop relative to where the view IS — a jump centers the target row,
+	 * so stepping from a derived "current row" shifted the view by half a page.
+	 */
+	function handleWindowKeydown(e: KeyboardEvent) {
+		if (!scrollEl || totalBuffered === 0 || e.defaultPrevented) return;
+		if (e.ctrlKey || e.metaKey || e.altKey) return;
+		// Only act while THIS table is on screen and the user isn't typing in a
+		// field, a dialog, or on a control that owns the arrow keys.
+		if (!scrollEl.isConnected || scrollEl.offsetParent === null) return;
+		const t = e.target as HTMLElement | null;
+		if (t) {
+			const tag = t.tagName;
+			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
+			if (t.closest('[role="dialog"], [role="separator"], [role="menu"], [role="tablist"]')) return;
+		}
+		const maxTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+		const next = keyScrollTarget(e.key, scrollEl.scrollTop, scrollEl.clientHeight, maxTop);
+		if (next === null) return;
+		e.preventDefault();
+		programmaticWindowStart = null; // a deliberate key press ends any jump lock
+		scrollEl.scrollTop = next;
+		lastKnownRowIndex = scrollTopToRowIndex(next);
 	}
 
 	/**
@@ -498,7 +431,6 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 				if (Math.abs(scrollEl.scrollTop - lockedScrollTop) > 0.5) {
 					scrollEl.scrollTop = lockedScrollTop;
 				}
-				scrollTopPx = lockedScrollTop;
 				return;
 			}
 			// Lock expired — release and resume normal windowing.
@@ -509,13 +441,11 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 		// trackpad pan) — do NOT move the row window. We decide this HERE, not in
 		// the rAF, because the settle pass calls applyScrollWindow twice and the
 		// second call would otherwise re-derive rows from any incidental vertical
-		// drift (which proportional mode amplifies into a huge jump).
+		// drift.
 		const sl = scrollEl.scrollLeft;
 		if (sl !== lastSeenScrollLeft) {
 			lastSeenScrollLeft = sl;
-			// Keep the spacer anchored to the live scrollTop so no black band
-			// appears, but leave windowStart (the rendered rows) untouched.
-			scrollTopPx = scrollEl.scrollTop;
+			// Leave windowStart (the rendered rows) untouched.
 			return;
 		}
 		if (rafPending) return;
@@ -564,7 +494,6 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 		void workspace.activeFilter;
 		void workspace.activeSort;
 		windowStart = 0;
-		scrollTopPx = 0;
 		if (scrollEl) scrollEl.scrollTop = 0;
 	});
 
@@ -714,26 +643,17 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 			visualIdx = Math.min(target.rowIndex, sortedRows.length - 1);
 		}
 
-		// New approach: render the target row into the virtual window, then
-		// scroll the REAL <tr> element into view. Native scrollIntoView is
-		// pixel-exact in BOTH exact-pixel and proportional (capped) modes, so it
-		// avoids the fraction-math drift that mis-placed deep rows. The previous
-		// approach set scrollTop = fraction * maxScrollTop, which is only an
-		// approximation once the content exceeds the 50k-px virtual-height cap.
+		// Render the target row into the virtual window, then position the
+		// scroll (see scrollRowIntoView).
 		const clamped = Math.min(
 			Math.max(0, visualIdx - OVERSCAN),
 			Math.max(0, totalBuffered - RENDER_SIZE)
 		);
 		programmaticWindowStart = clamped;
 		windowStart = clamped;
-		// Pre-anchor the proportional-mode spacer near the target so the rendered
-		// block is already close before we measure (prevents a one-frame flash).
-		// Use computeLandingScrollTop (not a naive `clamped * ROW_HEIGHT`) so
-		// scrollTop stays mathematically consistent with wherever the spacer
-		// clamp actually renders the row, in ALL regions (top/bottom-clamped
-		// windowStart included) — see its doc comment for the full rationale.
-		const preAnchor = computeLandingScrollTop(visualIdx, clamped, scrollEl?.clientHeight ?? 0);
-		scrollTopPx = preAnchor;
+		// Pre-position the lock at the target so the rendered block is already
+		// close before scrollRowIntoView measures (prevents a one-frame flash).
+		const preAnchor = rowIndexToScrollTop(visualIdx);
 		// Arm the scroll lock RIGHT NOW — before scrollRowIntoView's tick()/rAF
 		// gap. If the user flicked the scrollbar and THEN clicked a note, the
 		// momentum is still firing scroll events. Without an already-armed lock,
@@ -751,11 +671,11 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 
 	/** Phase 2 of the note jump: after the virtual window has rendered the
 	 *  target row, position it via a SINGLE direct scrollTop assignment (no
-	 *  scrollIntoView). scrollIntoView animates and, in proportional mode, chases
-	 *  the rendered block as the spacer re-anchors — which is exactly the "keeps
-	 *  flinging down" symptom. A one-shot scrollTop set is instant, and the
-	 *  scroll lock (below) holds the window fixed so the synthetic scroll events
-	 *  it fires — plus any leftover momentum — can't drag us off the row. */
+	 *  scrollIntoView). scrollIntoView animates and can chase the rendered block
+	 *  as the window re-anchors — the "keeps flinging down" symptom. A one-shot
+	 *  scrollTop set is instant, and the scroll lock (below) holds the window
+	 *  fixed so the synthetic scroll events it fires — plus any leftover
+	 *  momentum — can't drag us off the row. */
 	async function scrollRowIntoView(visualIdx: number, col: string, clamped: number) {
 		// Wait for Svelte to flush the windowStart change, then one more frame so
 		// layout (spacer heights) has settled before we measure the row.
@@ -769,28 +689,14 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 			// fires are absorbed (window held at `clamped`, no recompute/drift).
 			programmaticWindowStart = clamped;
 			scrollLockUntil = performance.now() + SCROLL_LOCK_MS;
-			let finalTop: number;
-			if (isProportional) {
-				// Centering via `elTop - halfClientHeight` subtracts a REAL pixel
-				// amount (~300-400px) which doesn't round-trip through the
-				// compressed proportional fraction — it corrupted scrollTop enough
-				// that the NEXT scroll/wheel event computed a wildly wrong row and
-				// jumped far away. Use the round-trip-consistent formula instead;
-				// the OVERSCAN buffer still keeps the row inside the rendered window.
-				finalTop = computeLandingScrollTop(visualIdx, clamped, scrollEl.clientHeight);
-			} else {
-				// Center the row using its live offset within the scroll content.
-				const elTop = el.offsetTop;
-				const target = elTop - Math.max(0, (scrollEl.clientHeight - ROW_HEIGHT) / 2);
-				const maxST = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
-				finalTop = Math.max(0, Math.min(target, maxST));
-			}
+			// Center the row using its live offset within the scroll content.
+			const elTop = el.offsetTop;
+			const centered = elTop - Math.max(0, (scrollEl.clientHeight - ROW_HEIGHT) / 2);
+			const maxST = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
+			const finalTop = Math.max(0, Math.min(centered, maxST));
 			scrollEl.scrollTop = finalTop;
-			scrollTopPx = finalTop;
 			lockedScrollTop = finalTop; // re-asserted during the lock to kill momentum
-			// Record the EXACT row just landed on — not re-derived via the
-			// plain fraction formula, which would disagree with finalTop in
-			// proportional mode (see lastKnownRowIndex's doc comment above).
+			// Record the exact row just landed on so the next wheel tick steps from it.
 			lastKnownRowIndex = visualIdx;
 		}
 		flashHighlight(col, visualIdx);
@@ -821,12 +727,8 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 		);
 		programmaticWindowStart = clamped;
 		windowStart = clamped;
-		// See the identical note in the scrollToCell effect above —
-		// computeLandingScrollTop keeps scrollTop consistent with the spacer
-		// clamp in all regions (top/bottom-clamped windowStart included).
-		const preAnchor = computeLandingScrollTop(visualIdx, clamped, scrollEl?.clientHeight ?? 0);
-		scrollTopPx = preAnchor;
-		lockedScrollTop = preAnchor;
+		// Land exactly on the row: in exact mode scrollTop is row * ROW_HEIGHT.
+		lockedScrollTop = rowIndexToScrollTop(visualIdx);
 		scrollLockUntil = performance.now() + SCROLL_LOCK_MS;
 		// flashHighlight() needs a column to key the highlight ring on — there's
 		// no "selected" column for a pure row jump, so flash the first column as
@@ -860,6 +762,8 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 	let filterBarRef = $state<{ addConditionExternal: () => void } | null>(null);
 
 </script>
+
+<svelte:window onkeydown={handleWindowKeydown} />
 
 <div class="flex flex-col h-full bg-surface dark:bg-slate-950 overflow-hidden">
 	{#if !workbook || !sheet}
@@ -925,6 +829,20 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 				</label>
 			{/if}
 
+			<!-- Scroll lock — ON by default. While on, vertical trackpad / wheel
+			     scrolling is ignored (a laptop trackpad swipe overshot); use the
+			     scrollbar, the arrow / Page keys or the Row box. Shared with the
+			     CSV viewer's identical button in DocumentPane.svelte. -->
+			<button
+				type="button"
+				onclick={() => scrollLock.toggle()}
+				aria-pressed={scrollLock.locked}
+				class="flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 rounded border transition-colors {scrollLock.locked ? 'border-blue-600/60 bg-blue-100 text-blue-800 dark:border-blue-700/60 dark:bg-blue-900/30 dark:text-blue-300' : 'border-gray-300 text-gray-600 hover:bg-gray-100 dark:border-slate-700 dark:text-gray-400 dark:hover:bg-slate-800'}"
+				title={scrollLock.locked ? 'Scroll lock ON — trackpad/wheel scrolling is disabled. Use the scrollbar, arrow keys or the Row box. Click to turn off.' : 'Scroll lock OFF — click to disable trackpad/wheel scrolling'}
+			>
+				<span aria-hidden="true">{scrollLock.locked ? '🔒' : '🔓'}</span> Scroll lock
+			</button>
+
 			<!-- Manual filter trigger — adds a condition row WITHOUT any LLM
 			     call, matching the CSV path's identical "Filter" button in
 			     DocumentPane.svelte. Notes viewing lives solely in the
@@ -951,7 +869,11 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 		<!-- Table -->
 
 		<!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
-		<div class="flex-1 csv-scroll-container overflow-auto" onscroll={handleTableScroll} use:nonPassiveWheel={handleWheel} role="region" aria-label="{sheet.name} data table">
+		<!-- overflow-anchor: none — this is a virtual scroller that moves its own
+		     content (spacer rows + sliding row window). Chrome's scroll anchoring
+		     would also shift scrollTop to compensate for rows moving, fighting the
+		     arrow-key / jump positioning (keys overshot mid-sheet). -->
+		<div class="flex-1 csv-scroll-container overflow-auto" style="overflow-anchor: none;" onscroll={handleTableScroll} use:nonPassiveWheel={handleWheel} role="region" aria-label="{sheet.name} data table">
 			{#if columns.length === 0}
 				<p class="text-xs text-gray-400 dark:text-gray-600 p-4">This sheet has no columns.</p>
 			{:else}
