@@ -739,6 +739,45 @@
 		workspace.requestFocusNote(id);
 	}
 
+	/**
+	 * Scroll `containerEl` so `range` lands a fixed distance from the TOP of
+	 * the reading pane, instead of relying on the browser's native
+	 * `scrollIntoView({ block: 'center' })`.
+	 *
+	 * Why a Range (not a parentElement/node): a note's anchor offset is a
+	 * single character position inside a text run that can span many wrapped
+	 * lines (a whole paragraph, a whole plain-text segment between clause
+	 * marks). Climbing up to `.parentElement` and measuring THAT element's
+	 * bounding rect gives you the box around the entire run — whose `.top`
+	 * is the top of the run's FIRST line, not the line the note is actually
+	 * on. That mismatch is exactly why the old scroll target drifted further
+	 * off the more text preceded the note within its enclosing span.
+	 *
+	 * A collapsed Range at the exact offset (from `rangeForOffset`) resolves
+	 * to the precise visual caret position — the same measurement the pin
+	 * overlay already uses via `recomputePins()`'s `range.getBoundingClientRect()`.
+	 * Reusing that exact calculation here guarantees the scroll target and
+	 * the rendered pin always agree, line for line.
+	 *
+	 * Why not scrollIntoView: `block: 'center'` measures against the nearest
+	 * scrollable ancestor's viewport and is notoriously inconsistent once
+	 * nested scroll containers, sticky headers, or short documents are
+	 * involved. Computing the delta ourselves and driving
+	 * `containerEl.scrollTop` directly is deterministic: the target range
+	 * always ends up `offsetPx` below the container's own top edge,
+	 * regardless of viewport size, browser, or where the note was before
+	 * the jump.
+	 */
+	function scrollRangeToTop(range: Range, offsetPx = 8) {
+		if (!containerEl) return;
+		const cRect = containerEl.getBoundingClientRect();
+		const rRect = range.getBoundingClientRect();
+		const delta = rRect.top - cRect.top - offsetPx;
+		const maxTop = containerEl.scrollHeight - containerEl.clientHeight;
+		const target = Math.max(0, Math.min(containerEl.scrollTop + delta, maxTop));
+		containerEl.scrollTo({ top: target, behavior: 'smooth' });
+	}
+
 	// ── Consume the PULL scroll-to-note signal (Insights bubble → document). ──
 	$effect(() => {
 		const id = workspace.scrollToNoteId;
@@ -750,8 +789,7 @@
 			const note = notesStore.notes.find((n) => n.id === id);
 			if (note && note.anchor.kind === 'prose') {
 				const range = rangeForOffset(note.anchor.offset);
-				const node = range?.startContainer.parentElement ?? null;
-				node?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+				if (range) scrollRangeToTop(range);
 				flashedNoteId = id;
 				setTimeout(() => {
 					if (flashedNoteId === id) flashedNoteId = null;
