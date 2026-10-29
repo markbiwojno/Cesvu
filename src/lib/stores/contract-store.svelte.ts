@@ -9,12 +9,12 @@
  *
  * ⚠️  IN-MEMORY BY DESIGN — there is NO persistence at rest. Documents live in
  * a module-scope Map for the lifetime of the page; a refresh or tab close wipes
- * everything. To keep work, the user EXPORTS to a `.cesvu` file (the only
- * durable, portable form). NO IndexedDB, NO localStorage, NO sync, NO
+ * everything. To keep work, the user EXPORTS to a `_cesvu.zip` archive (the
+ * only durable, portable form). NO IndexedDB, NO localStorage, NO sync, NO
  * migrations.
  *
- * NOTE: the `.cesvu` export carries a SHA-256 integrity checksum only, not
- * confidentiality — see cesvu-export.ts's top doc comment.
+ * NOTE: the `_cesvu.zip` export is a plain, standard zip with no
+ * confidentiality — see cesvu-zip-export.ts's top doc comment.
  *
  * MEMORY NOTES:
  *   - The reactive `documentsStore` holds lightweight {@link DocumentSummary}
@@ -39,10 +39,13 @@ import {
 } from '$lib/schema.js';
 
 import {
-	buildCesvuFile,
-	parseCesvuFile,
-	CesvuError
-} from '$lib/export/cesvu-export.js';
+	buildCesvuZip,
+	parseCesvuZip,
+	CesvuZipError,
+	CESVU_MANIFEST_VERSION,
+	SOURCE_DIR,
+	type CesvuManifest
+} from '$lib/export/cesvu-zip-export.js';
 
 
 /**
@@ -187,30 +190,33 @@ export async function deleteDocument(id: string): Promise<void> {
 }
 
 // ── .cesvu export / import (file-based, local-first sharing) ────────────────
-
-// ── .cesvu payload framing (CFP1) ─────────────────────────────────────────
 //
-// The bytes handed to buildCesvuFile() are framed so the original source
-// file travels as a RAW BINARY section instead of base64-inside-JSON. Layout:
-//   [0..3]           magic 'CFP1'
-//   [4..7]           uint32 BE  docJson length
-//   [8 .. 8+len)     docJson (UTF-8; the CesvuDocument WITHOUT rawContent)
-//   [8+len .. end)   raw source bytes (implicit length = remainder of plaintext)
-//
-// This avoids the overhead of base64 (1.33x inflation) plus JSON.stringify
-// duplicating a giant string.
-const PAYLOAD_MAGIC = new Uint8Array([0x43, 0x46, 0x50, 0x31]); // 'CFP1'
-const PAYLOAD_HEADER_LEN = 8; // magic(4) + uint32 docJsonLen(4)
+// A `.cesvu` share is a plain, standard `_cesvu.zip` archive — see
+// cesvu-zip-export.ts's top doc comment. There is no custom binary framing
+// here anymore (the old CFP1 payload format was retired along with the
+// hand-rolled `.CESVU` binary container): the original source file, if
+// included, rides as a real zip entry under `source/`, and every other field
+// is plain JSON in `manifest.json`.
 
-/** True if `buf` begins with the CFP1 payload magic. */
-function hasPayloadMagic(buf: Uint8Array): boolean {
-	return (
-		buf.length >= PAYLOAD_HEADER_LEN &&
-		buf[0] === PAYLOAD_MAGIC[0] &&
-		buf[1] === PAYLOAD_MAGIC[1] &&
-		buf[2] === PAYLOAD_MAGIC[2] &&
-		buf[3] === PAYLOAD_MAGIC[3]
-	);
+/** Best-effort MIME type for the embedded source file, by extension — purely
+ *  informational (written into manifest.json for a human/tool inspecting the
+ *  zip; never used to drive parsing on import, which always keys off
+ *  `document.sourceType`). */
+function guessSourceMimeType(sourceType: SourceType): string {
+	switch (sourceType) {
+		case 'pdf':
+			return 'application/pdf';
+		case 'docx':
+			return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+		case 'csv':
+			return 'text/csv';
+		case 'excel':
+			return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+		case 'txt':
+			return 'text/plain';
+		case 'md':
+			return 'text/markdown';
+	}
 }
 
 /** Decoded byte length of a standard (no-whitespace) base64 string. */
@@ -224,207 +230,33 @@ function base64DecodedLength(b64: string): number {
 }
 
 /**
- * Decode standard base64 straight into `target` at `offset`, in chunks, so we
- * never materialize a full-size intermediate byte array or a giant binary
- * string at once. CHUNK is a multiple of 4 so no base64 quantum (hence no '='
- * padding) is ever split across a chunk boundary.
+ * Decode standard base64 straight into a fresh Uint8Array, in chunks, so we
+ * never materialize a giant binary string at once. CHUNK is a multiple of 4
+ * so no base64 quantum (hence no '=' padding) is ever split across a chunk
+ * boundary.
  */
-function decodeBase64Into(b64: string, target: Uint8Array, offset: number): void {
+function decodeBase64(b64: string): Uint8Array {
 	const CHUNK = 1 << 20; // 1,048,576 chars (÷4 = clean quantum boundary)
-	let out = offset;
+	const out = new Uint8Array(base64DecodedLength(b64));
+	let pos = 0;
 	for (let i = 0; i < b64.length; i += CHUNK) {
 		const bin = atob(b64.slice(i, i + CHUNK));
-		for (let j = 0; j < bin.length; j++) target[out++] = bin.charCodeAt(j);
+		for (let j = 0; j < bin.length; j++) out[pos++] = bin.charCodeAt(j);
 	}
+	return out;
 }
 
 /**
- * Build the CFP1-framed plaintext payload for a stored document: the
- * document's own JSON (with `rawContent` stripped, since the source bytes
- * ride as a separate raw section) followed by the original source bytes
- * (when `includeSource` is true and the record actually carries any).
- * Used by {@link exportAsCesvu}.
- *
- * Throws a plain Error if the document id is unknown.
+ * Build a {@link CesvuManifest} from a stored document. Known fields map
+ * 1:1 onto the manifest's structured sections; any field this build doesn't
+ * model lands in `extras` so a round-trip through an older/different build
+ * never silently drops data (mirrors normalizeCesvuDocument's forward-compat
+ * passthrough on the way back in).
  */
-async function buildExportPayload(
-	documentId: string,
-	includeSource: boolean
-): Promise<{ doc: CesvuDocument; plaintext: Uint8Array }> {
-	const doc = await getDocument(documentId);
-	if (!doc) throw new Error('Document not found');
-
-	let sourceBytes: Uint8Array | null = null;
-	let sourceB64 = '';
-	if (includeSource) {
-		if (doc.rawContent instanceof Uint8Array) {
-			sourceBytes = doc.rawContent;
-		} else if (typeof doc.rawContent === 'string' && doc.rawContent.length > 0) {
-			sourceB64 = doc.rawContent;
-		}
-	}
-	const exportDoc: CesvuDocument = {
-		...doc,
-		rawContent: null
-	};
-
-	const docJson = new TextEncoder().encode(JSON.stringify(exportDoc));
-	const rawLen = sourceBytes ? sourceBytes.length : base64DecodedLength(sourceB64);
-	const plaintext = new Uint8Array(PAYLOAD_HEADER_LEN + docJson.length + rawLen);
-	plaintext.set(PAYLOAD_MAGIC, 0);
-	new DataView(plaintext.buffer).setUint32(4, docJson.length, false);
-	plaintext.set(docJson, PAYLOAD_HEADER_LEN);
-	if (sourceBytes) {
-		plaintext.set(sourceBytes, PAYLOAD_HEADER_LEN + docJson.length);
-	} else if (rawLen > 0) {
-		decodeBase64Into(sourceB64, plaintext, PAYLOAD_HEADER_LEN + docJson.length);
-	}
-
-	return { doc, plaintext };
-}
-
-/**
- * Export a stored document as a portable `.cesvu` file. See
- * cesvu-export.ts's top doc comment: this carries a SHA-256 integrity
- * checksum only, not confidentiality.
- *
- * `options.includeSource` controls whether the original file bytes
- * (`rawContent`, base64 of the source PDF/DOCX/CSV/XLSX) are written into
- * the file. It DEFAULTS TO FALSE — the `.cesvu` carries only the extracted
- * text + analysis (notes, clauses, profile, splits) unless the sender
- * explicitly opts in. (CSV/XLSX callers pass `includeSource: true` because
- * their viewers reconstruct the interactive table from the raw bytes.)
- *
- * Throws a plain Error if the document id is unknown.
- */
-export async function exportAsCesvu(
-	documentId: string,
-	options: { includeSource?: boolean } = {}
-): Promise<{ blob: Blob }> {
-	const includeSource = options.includeSource ?? false;
-	const { doc, plaintext } = await buildExportPayload(documentId, includeSource);
-
-	const metadata = {
-		filename: doc.name || 'document',
-		mimeType: 'application/json',
-		createdAt: Date.now()
-	};
-
-	const file = await buildCesvuFile(plaintext, metadata);
-	const blob = new Blob([file as BlobPart], { type: 'application/octet-stream' });
-	return { blob };
-}
-
-/**
- * Map a low-level {@link CesvuError} to a short, user-facing message. Anything
- * that isn't a recognized error becomes the generic fallback so we never
- * leak internals into the UI.
- */
-function describeImportError(err: unknown): string {
-
-	if (err instanceof CesvuError) {
-		switch (err.code) {
-			case 'BAD_MAGIC':
-				return 'This is not a .cesvu file.';
-			case 'UNSUPPORTED_VERSION':
-				return err.message || 'This file needs a newer version of Cesvu.';
-			case 'METADATA_CORRUPT':
-			case 'METADATA_INCOMPLETE':
-			case 'BAD_PREAMBLE_LENGTH':
-			case 'TOO_SHORT':
-				return 'This file appears to be corrupted.';
-			case 'CORRUPTED':
-				return 'This file appears to be corrupted \u2014 its contents don\u2019t match the stored checksum.';
-			default:
-				return 'Unable to import this file.';
-
-		}
-	}
-	return 'Unable to import this file.';
-}
-
-/**
- * Map an export-time failure to a short, user-facing message. Mirrors
- * {@link describeImportError} for the encrypt path so {@link ExportModal} can
- * surface a friendly string instead of a raw crypto message.
- */
-export function describeExportError(err: unknown): string {
-	if (err instanceof CesvuError) {
-		return `Unable to prepare this file: ${err instanceof Error ? err.message : String(err)}`;
-	}
-	return `Unable to prepare this file: ${err instanceof Error ? err.message : String(err)}`;
-}
-
-/**
- * Structurally validate + normalize a decoded object into a {@link
- * CesvuDocument}.
- * (The persisted shape is declared in src/lib/schema.ts as TS interfaces, so this
- * is the runtime guard at the trust boundary.) Returns null when the required
- * identity/content fields are missing or the wrong type; reserved fields are
- * defaulted so an older/partial export still round-trips cleanly.
- *
- * FORWARD-COMPAT: fields this build does not model are PRESERVED (not dropped)
- * — see the return below.
- */
-function normalizeCesvuDocument(value: unknown): CesvuDocument | null {
-	if (typeof value !== 'object' || value === null) return null;
-	const v = value as Record<string, unknown>;
-
-	const validSource =
-		v.sourceType === 'pdf' ||
-		v.sourceType === 'docx' ||
-		v.sourceType === 'txt' ||
-		v.sourceType === 'md' ||
-		v.sourceType === 'csv' ||
-		v.sourceType === 'excel';
-
-	if (
-		typeof v.id !== 'string' ||
-		typeof v.name !== 'string' ||
-		typeof v.text !== 'string' ||
-		!validSource
-	) {
-		return null;
-	}
-
-	const rawContent: string | Uint8Array | null =
-		typeof v.rawContent === 'string'
-			? v.rawContent
-			: v.rawContent instanceof Uint8Array
-				? v.rawContent
-				: null;
-
-	const rawSplits =
-		typeof v.splits === 'object' && v.splits !== null
-			? (v.splits as Record<string, unknown>)
-			: null;
-	const splits: DocumentSplits = {
-		manual: Array.isArray(rawSplits?.manual) ? (rawSplits!.manual as number[]) : [],
-		auto: Array.isArray(rawSplits?.auto) ? (rawSplits!.auto as number[]) : [],
-		mode: rawSplits?.mode === 'auto' ? 'auto' : 'manual'
-	};
-
-	const now = Date.now();
-
-	const known: CesvuDocument = {
-		id: v.id,
-		version: typeof v.version === 'number' ? v.version : CESVU_SCHEMA_VERSION,
-		name: v.name,
-		sourceType: v.sourceType as SourceType,
-		createdAt: typeof v.createdAt === 'number' ? v.createdAt : now,
-		updatedAt: now,
-		text: v.text,
-		paragraphs: Array.isArray(v.paragraphs) ? (v.paragraphs as DocumentParagraph[]) : [],
-		rawContent,
-		splits,
-		profile: (v.profile ?? null) as CesvuDocument['profile'],
-		clauses: Array.isArray(v.clauses) ? (v.clauses as CesvuDocument['clauses']) : [],
-		annotations: Array.isArray(v.annotations)
-			? (v.annotations as CesvuDocument['annotations'])
-			: [],
-		messages: Array.isArray(v.messages) ? (v.messages as CesvuDocument['messages']) : []
-	};
-
+function buildManifest(doc: CesvuDocument, includeSource: boolean): {
+	manifest: CesvuManifest;
+	source: { bytes: Uint8Array; filename: string } | null;
+} {
 	const knownKeys = new Set<string>([
 		'id',
 		'version',
@@ -442,54 +274,165 @@ function normalizeCesvuDocument(value: unknown): CesvuDocument | null {
 		'messages'
 	]);
 	const extras: Record<string, unknown> = {};
-	for (const key in v) {
-		if (!knownKeys.has(key)) extras[key] = v[key];
+	for (const key in doc) {
+		if (!knownKeys.has(key)) extras[key] = (doc as unknown as Record<string, unknown>)[key];
 	}
+
+	let source: { bytes: Uint8Array; filename: string } | null = null;
+	if (includeSource) {
+		if (doc.rawContent instanceof Uint8Array && doc.rawContent.length > 0) {
+			source = { bytes: doc.rawContent, filename: doc.name || 'source' };
+		} else if (typeof doc.rawContent === 'string' && doc.rawContent.length > 0) {
+			source = { bytes: decodeBase64(doc.rawContent), filename: doc.name || 'source' };
+		}
+	}
+
+	const manifest: CesvuManifest = {
+		cesvuManifestVersion: CESVU_MANIFEST_VERSION,
+		exportedAt: new Date().toISOString(),
+		document: {
+			id: doc.id,
+			version: doc.version,
+			name: doc.name,
+			sourceType: doc.sourceType,
+			createdAt: doc.createdAt,
+			updatedAt: doc.updatedAt,
+			text: doc.text,
+			paragraphs: doc.paragraphs
+		},
+		sourceFile: {
+			included: source !== null,
+			path: source ? `${SOURCE_DIR}${source.filename}` : null,
+			mimeType: source ? guessSourceMimeType(doc.sourceType) : null
+		},
+		splits: doc.splits,
+		clauses: doc.clauses,
+		notes: doc.annotations,
+		profile: doc.profile as CesvuManifest['profile'],
+		messages: doc.messages,
+		extras: Object.keys(extras).length > 0 ? extras : undefined
+	};
+
+	return { manifest, source };
+}
+
+/**
+ * Export a stored document as a portable `<name>_cesvu.zip` archive. See
+ * cesvu-zip-export.ts's top doc comment: this is a plain, inspectable zip
+ * with no confidentiality — anyone who has it can read manifest.json.
+ *
+ * `options.includeSource` controls whether the original file bytes
+ * (`rawContent`) are written into the archive under `source/`. It DEFAULTS
+ * TO FALSE — the export carries only the extracted text + analysis (notes,
+ * clauses, profile, splits) unless the sender explicitly opts in. (CSV/XLSX
+ * callers pass `includeSource: true` because their viewers reconstruct the
+ * interactive table from the raw bytes.)
+ *
+ * Throws a plain Error if the document id is unknown.
+ */
+export async function exportAsCesvu(
+	documentId: string,
+	options: { includeSource?: boolean } = {}
+): Promise<{ blob: Blob }> {
+	const doc = await getDocument(documentId);
+	if (!doc) throw new Error('Document not found');
+
+	const includeSource = options.includeSource ?? false;
+	const { manifest, source } = buildManifest(doc, includeSource);
+
+	const zipBytes = buildCesvuZip(manifest, source);
+	const blob = new Blob([zipBytes as BlobPart], { type: 'application/zip' });
+	return { blob };
+}
+
+/**
+ * Map a low-level {@link CesvuZipError} to a short, user-facing message.
+ * Anything that isn't a recognized error becomes the generic fallback so we
+ * never leak internals into the UI.
+ */
+function describeImportError(err: unknown): string {
+	if (err instanceof CesvuZipError) {
+		switch (err.code) {
+			case 'NOT_A_ZIP':
+				return 'This is not a .zip file.';
+			case 'MISSING_MANIFEST':
+				return 'This .zip file isn\u2019t a Cesvu export \u2014 it has no manifest.json.';
+			case 'UNSUPPORTED_MANIFEST_VERSION':
+				return err.message || 'This file needs a newer version of Cesvu.';
+			case 'MANIFEST_CORRUPT':
+				return 'This file appears to be corrupted.';
+			default:
+				return 'Unable to import this file.';
+		}
+	}
+	return 'Unable to import this file.';
+}
+
+/**
+ * Map an export-time failure to a short, user-facing message. Mirrors
+ * {@link describeImportError} so {@link ExportModal} can surface a friendly
+ * string instead of a raw internal message.
+ */
+export function describeExportError(err: unknown): string {
+	return `Unable to prepare this file: ${err instanceof Error ? err.message : String(err)}`;
+}
+
+/**
+ * Rebuild a {@link CesvuDocument} from an already-validated {@link
+ * CesvuManifest} (zod has already checked its structural shape in
+ * parseCesvuZip) plus the embedded source bytes, if any.
+ *
+ * FORWARD-COMPAT: fields this build does not model are PRESERVED via
+ * `manifest.extras`, the same passthrough the old binary format's importer
+ * provided — see {@link buildManifest}'s matching extraction on the way out.
+ */
+function documentFromManifest(
+	manifest: CesvuManifest,
+	sourceBytes: Uint8Array | null
+): CesvuDocument {
+	const extras = manifest.extras ?? {};
+
+	const known: CesvuDocument = {
+		id: manifest.document.id,
+		version:
+			typeof manifest.document.version === 'number'
+				? manifest.document.version
+				: CESVU_SCHEMA_VERSION,
+		name: manifest.document.name,
+		sourceType: manifest.document.sourceType,
+		createdAt: manifest.document.createdAt,
+		updatedAt: Date.now(),
+		text: manifest.document.text,
+		paragraphs: manifest.document.paragraphs as DocumentParagraph[],
+		rawContent: sourceBytes,
+		splits: manifest.splits as DocumentSplits,
+		profile: (manifest.profile ?? null) as CesvuDocument['profile'],
+		clauses: manifest.clauses as CesvuDocument['clauses'],
+		annotations: manifest.notes as CesvuDocument['annotations'],
+		messages: manifest.messages as CesvuDocument['messages']
+	};
 
 	return { ...extras, ...known } as CesvuDocument;
 }
 
 /**
- * Import a plain (unencrypted) `.cesvu` file: verify its integrity
- * checksum, validate the decoded document, store it in the in-memory map,
- * and return it.
+ * Import a `_cesvu.zip` archive: unzip it, validate manifest.json, rebuild
+ * the {@link CesvuDocument}, store it in the in-memory map, and return it.
  *
  * Throws an Error whose message is already user-facing (see
  * {@link describeImportError}) — the caller can surface `err.message` directly.
  */
 export async function importFromCesvu(file: File): Promise<CesvuDocument> {
-
-	let plaintext: Uint8Array;
+	let manifest: CesvuManifest;
+	let sourceBytes: Uint8Array | null;
 	try {
 		const bytes = new Uint8Array(await file.arrayBuffer());
-		({ payload: plaintext } = await parseCesvuFile(bytes));
+		({ manifest, sourceBytes } = parseCesvuZip(bytes));
 	} catch (err) {
 		throw new Error(describeImportError(err));
 	}
 
-	if (!hasPayloadMagic(plaintext)) {
-		throw new Error('This file appears to be corrupted.');
-	}
-
-	let parsed: unknown;
-	try {
-		const dv = new DataView(plaintext.buffer, plaintext.byteOffset, plaintext.byteLength);
-		const docJsonLen = dv.getUint32(4, false);
-		const jsonEnd = PAYLOAD_HEADER_LEN + docJsonLen;
-		const json = new TextDecoder().decode(plaintext.subarray(PAYLOAD_HEADER_LEN, jsonEnd));
-		parsed = JSON.parse(json);
-		if (jsonEnd < plaintext.length && parsed !== null && typeof parsed === 'object') {
-			(parsed as Record<string, unknown>).rawContent = plaintext.subarray(jsonEnd);
-		}
-	} catch {
-		throw new Error('This file appears to be corrupted.');
-	}
-
-	const doc = normalizeCesvuDocument(parsed);
-	parsed = null;
-
-	if (!doc) throw new Error('This file appears to be corrupted.');
-
+	const doc = documentFromManifest(manifest, sourceBytes);
 	docs.set(doc.id, doc);
 	sync();
 	return doc;

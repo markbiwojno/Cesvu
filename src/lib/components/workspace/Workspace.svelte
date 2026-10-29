@@ -252,8 +252,8 @@
 		const file = e.dataTransfer?.files?.[0];
 		if (!file) return;
 
-		// .cesvu files route to the open flow.
-		if (file.name.toLowerCase().endsWith('.cesvu')) {
+		// _cesvu.zip archives route to the open flow.
+		if (file.name.toLowerCase().endsWith('_cesvu.zip')) {
 			workspace.requestImport(file);
 		}
 	}
@@ -264,7 +264,7 @@
 	 * Warn before a refresh / tab close when there's in-progress work. Documents
 	 * now live only in memory (see contract-store.svelte.ts — in-memory by
 	 * design), so a reload wipes everything that hasn't been exported to a
-	 * .cesvu file. We only prompt when there's something to lose (a file is open
+	 * `_cesvu.zip` archive. We only prompt when there's something to lose (a file is open
 	 * or notes exist); an empty workspace reloads silently. The custom string is
 	 * shown by older browsers; modern ones display their own generic message, so
 	 * we set both `returnValue` and the return value for maximum compatibility.

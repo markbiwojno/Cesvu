@@ -1,12 +1,12 @@
 <script lang="ts">
 	/**
-	 * ImportModal.svelte — open a .cesvu file.
+	 * ImportModal.svelte — open a `_cesvu.zip` archive.
 	 *
 	 * The file is chosen BEFORE this modal opens (file input or drag-drop) and
-	 * handed in via the `file` prop. The `.cesvu` export carries a SHA-256
-	 * integrity checksum only, not confidentiality (see cesvu-export.ts's top
-	 * doc comment). Opening a file is therefore just: confirm, parse +
-	 * checksum-verify, show the result.
+	 * handed in via the `file` prop. The export is a plain, standard zip with
+	 * no confidentiality (see cesvu-zip-export.ts's top doc comment). Opening
+	 * a file is therefore just: confirm, unzip + validate manifest.json, show
+	 * the result.
 	 *
 	 * ── "File opened" success screen (stays open) ────────────────────────────
 	 * The success screen stays open until the user takes an explicit action

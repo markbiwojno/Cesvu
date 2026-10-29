@@ -1,19 +1,20 @@
 <script lang="ts">
 	/**
-	 * ExportModal.svelte — turn a saved document into a portable .cesvu file.
+	 * ExportModal.svelte — turn a saved document into a portable `_cesvu.zip`
+	 * archive.
 	 *
 	 * Flow:
 	 *   1. "options" — the sender chooses whether the ORIGINAL SOURCE FILE is
-	 *      embedded in the .cesvu. Default is INCLUDE for every source-bearing
+	 *      embedded in the archive. Default is INCLUDE for every source-bearing
 	 *      type (PDF/DOCX/CSV/XLSX): "Include the original file" is checked, and
 	 *      the sender can opt out. Opting out still ships the extracted text +
 	 *      analysis; for CSV/XLSX it also means the recipient can't rebuild the
 	 *      interactive table (we say so). TXT/MD have no separate source, so the
 	 *      step is skipped entirely (goes straight to "generating").
-	 *   2. "generating" — build the plain, checksummed .cesvu file (see
-	 *      exportAsCesvu). The .cesvu export carries a SHA-256 integrity
-	 *      checksum only, not confidentiality (see cesvu-export.ts's top doc
-	 *      comment).
+	 *   2. "generating" — build the plain `_cesvu.zip` archive (see
+	 *      exportAsCesvu): manifest.json + README.txt + an optional source/
+	 *      entry. It's a standard zip with no confidentiality (see
+	 *      cesvu-zip-export.ts's top doc comment).
 	 *   3. "sharing" / "done" — the file is ready to share (Web Share API) or
 	 *      has already downloaded.
 	 */
@@ -172,7 +173,7 @@
 	function share() {
 		if (!blob) return;
 		shareFile = new File([blob], DEFAULT_CESVU_DOWNLOAD_NAME, {
-			type: 'application/octet-stream'
+			type: 'application/zip'
 		});
 		phase = 'sharing';
 	}
@@ -266,7 +267,7 @@
 			</div>
 			<p class="text-sm font-medium text-gray-900 dark:text-white">Your file is downloading.</p>
 			<p class="text-xs text-gray-500 dark:text-gray-400">
-				This file is not encrypted — anyone with it can open it.
+				This is a plain .zip file, not encrypted — anyone with it can open it.
 			</p>
 		</div>
 	{/if}

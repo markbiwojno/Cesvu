@@ -1,9 +1,10 @@
 /**
  * cesvu-filename.ts — shared helper for building the OUTER (on-disk)
- * filename of a downloaded/saved `.cesvu` file from an original filename.
+ * filename of a downloaded/saved `_cesvu.zip` archive from an original
+ * filename.
  *
  * Design note: the original filename + extension travel INSIDE the
- * `.cesvu` file's metadata (see CesvuMetadata), separate from the OUTER
+ * archive's `manifest.json` (see CesvuManifest), separate from the OUTER
  * filename — what a mail client, cloud drive, or Finder/Explorer window
  * shows. ExportModal.svelte's document export always emits the generic
  * DEFAULT_CESVU_DOWNLOAD_NAME below rather than deriving a name from the
@@ -15,18 +16,18 @@
 /**
  * The generic outer filename used when no original name is available (and,
  * for the viewer's document export, unconditionally). The real filename
- * and extension travel inside the file's metadata instead.
+ * and extension travel inside manifest.json instead.
  */
-export const DEFAULT_CESVU_DOWNLOAD_NAME = 'cesvu-document.cesvu';
+export const DEFAULT_CESVU_DOWNLOAD_NAME = 'cesvu-document_cesvu.zip';
 
 /**
  * OUTER NAMES ONLY. Do NOT reuse this for a filename being RESTORED from
- * a decrypted envelope's `metadata.filename` (see ImportModal.svelte).
- * The two names have opposite requirements:
+ * an imported archive's `manifest.json` (see ImportModal.svelte). The two
+ * names have opposite requirements:
  *
- *   - the OUTER `.cesvu` name should disclose as little as possible, so
+ *   - the OUTER `_cesvu.zip` name should disclose as little as possible, so
  *     dropping the original extension is correct here (that's the whole
- *     point: `document.txt` -> `document.cesvu`);
+ *     point: `document.txt` -> `document_cesvu.zip`);
  *   - a RESTORED name should be reproduced as faithfully as possible,
  *     because giving the user back their real file is the feature.
  *
@@ -60,10 +61,10 @@ function sanitizeBaseName(name: string): string {
 }
 
 /**
- * Build the outer `.cesvu` filename for a document/file whose original
+ * Build the outer `_cesvu.zip` filename for a document/file whose original
  * name is `originalName` (e.g. "quarterly-report.pdf" -> "quarterly-
- * report.cesvu"). Falls back to `fallback` (default:
- * "cesvu-document.cesvu") when `originalName` is missing/empty or
+ * report_cesvu.zip"). Falls back to `fallback` (default:
+ * "cesvu-document_cesvu.zip") when `originalName` is missing/empty or
  * nothing safe remains after sanitizing.
  */
 export function buildCesvuDownloadName(
@@ -73,5 +74,5 @@ export function buildCesvuDownloadName(
 	if (!originalName) return fallback;
 	const safe = sanitizeBaseName(originalName);
 	if (!safe) return fallback;
-	return `${safe}.cesvu`;
+	return `${safe}_cesvu.zip`;
 }

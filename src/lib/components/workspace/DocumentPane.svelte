@@ -494,11 +494,12 @@
 
 
 	// ============================================================
-	// .cesvu import (open an exported document)
+	// _cesvu.zip import (open an exported document)
 	//
 	// Lives on the upload/landing page alongside the other source formats. A
-	// dropped or picked .cesvu file is routed here (see handleFileSelected) and
-	// the recipient enters the share words to open it.
+	// dropped or picked _cesvu.zip archive is routed here (see
+	// handleFileSelected) and opened immediately — no password or shared
+	// secret involved, since the export carries no confidentiality.
 	// ============================================================
 	let showImport = $state(false);
 	let importFile = $state<File | null>(null);
@@ -513,14 +514,13 @@
 		const input = e.target as HTMLInputElement;
 		const f = input.files?.[0];
 		// Mobile Safari's document picker does NOT filter by the `accept`
-		// attribute for custom extensions like ".cesvu" (it isn't a
-		// registered UTI) — it shows every file type regardless of the
-		// `accept=".cesvu"` hint below. Without this guard, picking e.g. a
+		// attribute very strictly — it shows every file type regardless of
+		// the `accept=".zip"` hint below. Without this guard, picking e.g. a
 		// .pdf or .jpg here would route straight into the unlock flow and
-		// fail deep inside decryption with a confusing error. Validate the
+		// fail deep inside parsing with a confusing error. Validate the
 		// extension ourselves and reject early with a clear message.
-		if (f && !f.name.toLowerCase().endsWith('.cesvu')) {
-			workspace.setError('Please select a .cesvu file.');
+		if (f && !f.name.toLowerCase().endsWith('_cesvu.zip')) {
+			workspace.setError('Please select a _cesvu.zip file.');
 			input.value = '';
 			return;
 		}
@@ -530,7 +530,7 @@
 	}
 
 
-	// Consume a .cesvu file handed in by the workspace-level drag-and-drop zone
+	// Consume a _cesvu.zip archive handed in by the workspace-level drag-and-drop zone
 	// (Workspace.svelte). The drop target is the whole shell, which doesn't own
 	// the unlock modal, so it stashes the file on the store via requestImport();
 	// we pick it up here and clear it immediately (PULL pattern) so it can't be
@@ -545,7 +545,7 @@
 
 
 	/**
-	 * A .cesvu file was unlocked. The decoded {@link CesvuDocument} is already
+	 * A _cesvu.zip archive was opened. The decoded {@link CesvuDocument} is already
 	 * persisted to IndexedDB (importFromCesvu did that); now MATERIALIZE it into
 	 * the workspace so it actually displays. Without this the modal would close
 	 * onto the empty upload page — the doc would be saved but invisible.
@@ -562,7 +562,7 @@
 	 * dismisses itself via onclose a moment later.
 	 */
 	async function handleImported(doc: CesvuDocument) {
-		// This session was opened by unlocking a .cesvu file. Mark it so the
+		// This session was opened by importing a _cesvu.zip archive. Mark it so the
 		// Export dialog can offer to recover the original source file (a directly
 		// uploaded file already lives on the user's disk, so it never offers this).
 		workspace.setOpenedFromCesvu(true);
@@ -773,9 +773,10 @@
 	// ============================================================
 	async function handleFileSelected(file: File) {
 
-		// A .cesvu file is an exported document, not a source file to parse —
-		// route it into the open flow instead of the normal parser pipeline.
-		if (file.name.toLowerCase().endsWith('.cesvu')) {
+		// A _cesvu.zip archive is an exported document, not a source file to
+		// parse — route it into the open flow instead of the normal parser
+		// pipeline.
+		if (file.name.toLowerCase().endsWith('_cesvu.zip')) {
 			openImportFor(file);
 			return;
 		}
@@ -2027,7 +2028,7 @@
 	// loads the new document's persisted `clauses` (or starts clean); when the id
 	// transitions null → real (a fresh upload that just got persisted on export),
 	// it migrates the in-memory marks into the new record. Marks now live on
-	// CesvuDocument.clauses, so they travel inside the .cesvu export.
+	// CesvuDocument.clauses, so they travel inside the _cesvu.zip export.
 	$effect(() => {
 		const text = documentText;
 		const contractId = workspace.activeContractId;
@@ -2434,7 +2435,7 @@
 	{/if}
 
 
-	<!-- Source-omitted banner — shown to a recipient who opened a .cesvu whose
+	<!-- Source-omitted banner — shown to a recipient who opened a _cesvu.zip whose
 	     sender chose NOT to embed the original file. The extracted text + analysis
 	     are all present; only the original binary (PDF/DOCX/…) is unavailable. -->
 	{#if workspace.sourceOmitted}
@@ -2478,8 +2479,8 @@
 
 
 
-					<!-- Open a previously shared .cesvu document. A picked or dropped
-					     .cesvu file routes to the unlock flow (see handleFileSelected). -->
+					<!-- Open a previously shared Cesvu document. A picked or dropped
+					     _cesvu.zip archive routes to the open flow (see handleFileSelected). -->
 					<div class="flex items-center justify-center gap-2 text-xs text-gray-500">
 						<span class="h-px flex-1 bg-gray-200 dark:bg-slate-800"></span>
 						<span>or</span>
@@ -2491,13 +2492,13 @@
 						class="w-full inline-flex items-center justify-center gap-2 px-4 py-2 sm:py-2.5 rounded-lg border border-gray-300 bg-white hover:bg-gray-100 hover:border-gray-400 dark:border-slate-700 dark:bg-slate-900 dark:hover:bg-slate-800 dark:hover:border-gray-600 text-sm font-medium text-gray-800 dark:text-gray-200 transition-colors"
 					>
 						<span aria-hidden="true">📄</span>
-						<span>Import a .cesvu file</span>
+						<span>Import a Cesvu file</span>
 					</button>
 
 					<input
 						bind:this={importInputEl}
 						type="file"
-						accept=".cesvu"
+						accept=".zip"
 						onchange={onImportPicked}
 						class="sr-only"
 						aria-hidden="true"
@@ -2954,7 +2955,7 @@
 	<CellContextMenu x={menu.x} y={menu.y} target={menu.target} onClose={closeMenu} />
 {/if}
 
-<!-- Open (.cesvu import) modal -->
+<!-- Open (_cesvu.zip import) modal -->
 {#if showImport && importFile}
 	<ImportModal
 		file={importFile}
