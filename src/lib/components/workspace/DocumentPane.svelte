@@ -1619,8 +1619,9 @@
 	 * convert it to an exact scrollTop, so even a fast, sustained swipe can
 	 * never move more than a bounded distance.
 	 *
-	 * With the scroll lock ON (the default) vertical wheel input is ignored
-	 * entirely; the scrollbar, the Row box and the keyboard still work.
+	 * With the scroll lock ON (off by default; toggled from the toolbar) vertical
+	 * wheel input is ignored entirely; the scrollbar, the Row box and the
+	 * keyboard still work.
 	 */
 	function handleWheel(e: WheelEvent) {
 		if (!scrollEl || totalBuffered === 0) return;
@@ -2217,7 +2218,7 @@
 				</label>
 			{/if}
 
-			<!-- Scroll lock — ON by default. While on, vertical trackpad / wheel
+			<!-- Scroll lock — OFF by default. While on, vertical trackpad / wheel
 			     scrolling is ignored (a laptop trackpad swipe overshot); use the
 			     scrollbar, the arrow / Page keys or the Row box. Shared with the
 			     Excel viewer's identical button in SpreadsheetViewer.svelte. -->
