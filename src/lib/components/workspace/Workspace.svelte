@@ -13,6 +13,7 @@
 	import ExportModal from '$lib/components/ExportModal.svelte';
 	import type { ParsedFile } from '$lib/types.js';
 	import { dropContainsDirectory } from '$lib/utils/drag-drop.js';
+	import { isCesvuZip } from '$lib/utils/is-cesvu-zip.js';
 	import { parsedFileToDocumentInit } from '$lib/utils/parsed-file-to-document.js';
 
 
@@ -233,7 +234,7 @@
 		}
 	}
 
-	function onDrop(e: DragEvent) {
+	async function onDrop(e: DragEvent) {
 		if (!dragHasFiles(e)) return;
 		e.preventDefault();
 		dragCounter = 0;
@@ -252,8 +253,9 @@
 		const file = e.dataTransfer?.files?.[0];
 		if (!file) return;
 
-		// _cesvu.zip archives route to the open flow.
-		if (file.name.toLowerCase().endsWith('_cesvu.zip')) {
+		// Cesvu export archives route to the open flow. Detected by content,
+		// not the `_cesvu.zip` suffix — browsers rename repeat downloads.
+		if (await isCesvuZip(file)) {
 			workspace.requestImport(file);
 		}
 	}

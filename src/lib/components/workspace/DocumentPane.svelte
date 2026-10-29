@@ -19,6 +19,7 @@
 	import ClauseSidebar from '$lib/components/lenses/ClauseSidebar.svelte';
 	import NotesPane from '$lib/components/lenses/NotesPane.svelte';
 
+	import { isCesvuZip } from '$lib/utils/is-cesvu-zip.js';
 	import { clauseStore } from '$lib/stores/clauseStore.svelte.js';
 	import { notesStore } from '$lib/stores/notesStore.svelte.js';
 
@@ -510,7 +511,7 @@
 		showImport = true;
 	}
 
-	function onImportPicked(e: Event) {
+	async function onImportPicked(e: Event) {
 		const input = e.target as HTMLInputElement;
 		const f = input.files?.[0];
 		// Mobile Safari's document picker does NOT filter by the `accept`
@@ -519,8 +520,8 @@
 		// .pdf or .jpg here would route straight into the unlock flow and
 		// fail deep inside parsing with a confusing error. Validate the
 		// extension ourselves and reject early with a clear message.
-		if (f && !f.name.toLowerCase().endsWith('_cesvu.zip')) {
-			workspace.setError('Please select a _cesvu.zip file.');
+		if (f && !(await isCesvuZip(f))) {
+			workspace.setError('Please select a Cesvu .zip file.');
 			input.value = '';
 			return;
 		}
@@ -776,7 +777,10 @@
 		// A _cesvu.zip archive is an exported document, not a source file to
 		// parse — route it into the open flow instead of the normal parser
 		// pipeline.
-		if (file.name.toLowerCase().endsWith('_cesvu.zip')) {
+		// Detected by content, not the `_cesvu.zip` suffix: browsers rename
+		// repeat downloads to "... (1).zip", which used to fall through to the
+		// plain-text parser and display garbled zip bytes.
+		if (await isCesvuZip(file)) {
 			openImportFor(file);
 			return;
 		}

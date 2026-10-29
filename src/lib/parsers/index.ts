@@ -14,7 +14,7 @@
 
 import type { CsvData } from '$lib/types.js';
 import { parseCsv, workbookToCsvData } from './csv.js';
-import { parseTXT } from './txt.js';
+import { parseTXT, looksBinary } from './txt.js';
 import { parseMD } from './md.js';
 import { parsePDF } from './pdf.js';
 import { parseDOCX } from './docx.js';
@@ -131,7 +131,11 @@ export async function parseFile(file: File): Promise<import('$lib/types.js').Par
 		default: {
 			// Last resort: try reading as plain text
 			try {
-				return await parseTXT(file);
+				const asText = await parseTXT(file);
+				if (looksBinary(asText.parsedData as string)) {
+					throw new Error('binary content');
+				}
+				return asText;
 			} catch {
 				throw new Error(
 					`Unsupported file type: "${file.name}". ` +
