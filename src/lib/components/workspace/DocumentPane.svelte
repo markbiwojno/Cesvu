@@ -20,7 +20,12 @@
 	import NotesPane from '$lib/components/lenses/NotesPane.svelte';
 
 	import { isCesvuZip } from '$lib/utils/is-cesvu-zip.js';
-	import { ROW_HEIGHT, keyScrollTarget } from '$lib/components/viewer/spreadsheet-scroll.js';
+	import {
+		ROW_HEIGHT,
+		keyScrollTarget,
+		wheelAction,
+		horizontalDeltaPx
+	} from '$lib/components/viewer/spreadsheet-scroll.js';
 	import { scrollLock } from '$lib/stores/scrollLock.svelte.js';
 	import { clauseStore } from '$lib/stores/clauseStore.svelte.js';
 	import { notesStore } from '$lib/stores/notesStore.svelte.js';
@@ -1625,10 +1630,19 @@
 	 */
 	function handleWheel(e: WheelEvent) {
 		if (!scrollEl || totalBuffered === 0) return;
-		if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // sideways — let it pass through natively
 
-		if (scrollLock.locked) {
+		const action = wheelAction(e.deltaX, e.deltaY, e.ctrlKey, scrollLock.locked);
+		if (action === 'pass') return; // pinch-zoom, or sideways scroll with the lock off
+		if (action === 'block') {
 			e.preventDefault();
+			return;
+		}
+		if (action === 'scroll-horizontal') {
+			// Lock ON: scroll sideways ourselves and apply ONLY the horizontal
+			// part. Letting the browser do it also applied the swipe's small
+			// vertical component, so the table drifted and then jumped rows.
+			e.preventDefault();
+			scrollEl.scrollLeft += horizontalDeltaPx(e.deltaX, e.deltaMode, scrollEl.clientWidth);
 			return;
 		}
 

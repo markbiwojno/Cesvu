@@ -66,3 +66,41 @@ export function keyScrollTarget(
 	}
 	return Math.max(0, Math.min(target, Math.max(0, maxScrollTop)));
 }
+
+/** What a wheel / trackpad event should do. */
+export type WheelAction =
+	| 'pass' // leave it to the browser (pinch-zoom, or sideways scroll with the lock off)
+	| 'block' // swallow it (vertical input while the scroll lock is on)
+	| 'scroll-horizontal' // scroll sideways ourselves, applying ONLY the horizontal part
+	| 'step-vertical'; // throttled vertical row stepping (lock off)
+
+/**
+ * Decide what to do with a wheel event.
+ *
+ * A mostly-horizontal trackpad swipe still carries a small vertical
+ * component. Letting those events pass to the browser while the lock is on
+ * applied that vertical part natively, so the table drifted (and then jumped a
+ * few rows) during sideways swiping. With the lock on, horizontal-dominant
+ * events are therefore handled here: only deltaX is applied.
+ *
+ * ctrlKey marks trackpad pinch-zoom; never interfere with it.
+ * With the lock OFF, horizontal-dominant events pass through unchanged.
+ */
+export function wheelAction(
+	deltaX: number,
+	deltaY: number,
+	ctrlKey: boolean,
+	locked: boolean
+): WheelAction {
+	if (ctrlKey) return 'pass';
+	const horizontal = Math.abs(deltaX) > Math.abs(deltaY);
+	if (horizontal) return locked ? 'scroll-horizontal' : 'pass';
+	return locked ? 'block' : 'step-vertical';
+}
+
+/** deltaX in pixels, honouring WheelEvent.deltaMode (0 px, 1 lines, 2 pages). */
+export function horizontalDeltaPx(deltaX: number, deltaMode: number, clientWidth: number): number {
+	if (deltaMode === 1) return deltaX * ROW_HEIGHT;
+	if (deltaMode === 2) return deltaX * clientWidth;
+	return deltaX;
+}

@@ -32,7 +32,12 @@ import { tick } from 'svelte';
 	import type { ColumnProfile } from '$lib/types.js';
 import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter.js';
 	import { matchesValue } from '$lib/pipeline/valueMatch.js';
-	import { ROW_HEIGHT, keyScrollTarget } from './spreadsheet-scroll.js';
+	import {
+		ROW_HEIGHT,
+		keyScrollTarget,
+		wheelAction,
+		horizontalDeltaPx
+	} from './spreadsheet-scroll.js';
 	import { scrollLock } from '$lib/stores/scrollLock.svelte.js';
 
 
@@ -324,10 +329,19 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 	 */
 	function handleWheel(e: WheelEvent) {
 		if (!scrollEl || totalBuffered === 0) return;
-		if (Math.abs(e.deltaX) > Math.abs(e.deltaY)) return; // sideways — let it pass through natively
 
-		if (scrollLock.locked) {
+		const action = wheelAction(e.deltaX, e.deltaY, e.ctrlKey, scrollLock.locked);
+		if (action === 'pass') return; // pinch-zoom, or sideways scroll with the lock off
+		if (action === 'block') {
 			e.preventDefault();
+			return;
+		}
+		if (action === 'scroll-horizontal') {
+			// Lock ON: scroll sideways ourselves and apply ONLY the horizontal
+			// part. Letting the browser do it also applied the swipe's small
+			// vertical component, so the table drifted and then jumped rows.
+			e.preventDefault();
+			scrollEl.scrollLeft += horizontalDeltaPx(e.deltaX, e.deltaMode, scrollEl.clientWidth);
 			return;
 		}
 
