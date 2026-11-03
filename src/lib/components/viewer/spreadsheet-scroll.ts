@@ -67,6 +67,38 @@ export function keyScrollTarget(
 	return Math.max(0, Math.min(target, Math.max(0, maxScrollTop)));
 }
 
+/** Fallback horizontal step (px) per Left/Right key press. */
+export const HORIZONTAL_KEY_STEP = 80;
+
+/**
+ * New scrollLeft for a horizontal navigation key, or null if the key isn't
+ * handled. ArrowLeft/ArrowRight step by `step` px (defaults to
+ * HORIZONTAL_KEY_STEP). Clamped to [0, maxScrollLeft].
+ *
+ * Only wired up while the scroll lock is ON: with the lock off, the arrow
+ * keys scroll vertically (keyScrollTarget) and sideways scrolling is left to
+ * the scrollbar/trackpad, matching the vertical keys' existing behavior.
+ */
+export function keyScrollLeftTarget(
+	key: string,
+	scrollLeft: number,
+	maxScrollLeft: number,
+	step: number = HORIZONTAL_KEY_STEP
+): number | null {
+	let target: number;
+	switch (key) {
+		case 'ArrowRight':
+			target = scrollLeft + step;
+			break;
+		case 'ArrowLeft':
+			target = scrollLeft - step;
+			break;
+		default:
+			return null;
+	}
+	return Math.max(0, Math.min(target, Math.max(0, maxScrollLeft)));
+}
+
 /** What a wheel / trackpad event should do. */
 export type WheelAction =
 	| 'pass' // leave it to the browser (pinch-zoom, or sideways scroll with the lock off)

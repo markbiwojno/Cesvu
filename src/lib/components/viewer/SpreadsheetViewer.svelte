@@ -35,6 +35,7 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 	import {
 		ROW_HEIGHT,
 		keyScrollTarget,
+		keyScrollLeftTarget,
 		wheelAction,
 		horizontalDeltaPx
 	} from './spreadsheet-scroll.js';
@@ -400,6 +401,16 @@ import { evaluate as evalFilterTree, describeFilter } from '$lib/pipeline/filter
 			const tag = t.tagName;
 			if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || t.isContentEditable) return;
 			if (t.closest('[role="dialog"], [role="separator"], [role="menu"], [role="tablist"]')) return;
+		}
+		// With the scroll lock ON the vertical keys are disabled (wheel/trackpad
+		// is also blocked), but Left/Right should still work to pan sideways.
+		if (scrollLock.locked) {
+			const maxLeft = Math.max(0, scrollEl.scrollWidth - scrollEl.clientWidth);
+			const nextLeft = keyScrollLeftTarget(e.key, scrollEl.scrollLeft, maxLeft);
+			if (nextLeft === null) return;
+			e.preventDefault();
+			scrollEl.scrollLeft = nextLeft;
+			return;
 		}
 		const maxTop = Math.max(0, scrollEl.scrollHeight - scrollEl.clientHeight);
 		const next = keyScrollTarget(e.key, scrollEl.scrollTop, scrollEl.clientHeight, maxTop);

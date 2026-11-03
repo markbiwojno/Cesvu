@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { ROW_HEIGHT, MAX_SCROLL_PX, keyScrollTarget } from './spreadsheet-scroll.js';
+import {
+	ROW_HEIGHT,
+	MAX_SCROLL_PX,
+	HORIZONTAL_KEY_STEP,
+	keyScrollTarget,
+	keyScrollLeftTarget
+} from './spreadsheet-scroll.js';
 import { MAX_DISPLAY_ROWS } from '$lib/config.js';
 
 const VIEWPORT = 600; // 21 rows
@@ -54,5 +60,34 @@ describe('keyScrollTarget', () => {
 		expect(keyScrollTarget('a', 100, VIEWPORT, MAX_TOP)).toBeNull();
 		expect(keyScrollTarget('Enter', 100, VIEWPORT, MAX_TOP)).toBeNull();
 		expect(keyScrollTarget('ArrowLeft', 100, VIEWPORT, MAX_TOP)).toBeNull();
+	});
+});
+
+describe('keyScrollLeftTarget', () => {
+	const MAX_LEFT = 2_000;
+
+	it('moves right/left by the default step', () => {
+		expect(keyScrollLeftTarget('ArrowRight', 100, MAX_LEFT)).toBe(100 + HORIZONTAL_KEY_STEP);
+		expect(keyScrollLeftTarget('ArrowLeft', 100, MAX_LEFT)).toBe(100 - HORIZONTAL_KEY_STEP);
+	});
+
+	it('accepts a custom step', () => {
+		expect(keyScrollLeftTarget('ArrowRight', 100, MAX_LEFT, 150)).toBe(250);
+	});
+
+	it('clamps at both ends', () => {
+		expect(keyScrollLeftTarget('ArrowLeft', 10, MAX_LEFT)).toBe(0);
+		expect(keyScrollLeftTarget('ArrowRight', MAX_LEFT - 5, MAX_LEFT)).toBe(MAX_LEFT);
+	});
+
+	it('handles content narrower than the viewport', () => {
+		expect(keyScrollLeftTarget('ArrowRight', 0, 0)).toBe(0);
+		expect(keyScrollLeftTarget('ArrowLeft', 0, -20)).toBe(0);
+	});
+
+	it('ignores other keys', () => {
+		expect(keyScrollLeftTarget('ArrowUp', 100, MAX_LEFT)).toBeNull();
+		expect(keyScrollLeftTarget('ArrowDown', 100, MAX_LEFT)).toBeNull();
+		expect(keyScrollLeftTarget('a', 100, MAX_LEFT)).toBeNull();
 	});
 });
