@@ -6,10 +6,15 @@
  */
 
 import { newId } from '$lib/utils/id.js';
-import type { ReportBuildRequest, ReportProgress, ColumnVisualBuildRequest } from './report-worker.js';
+import type {
+	ReportBuildRequest,
+	ReportProgress,
+	ColumnVisualBuildRequest,
+	CellCommentaryBuildRequest
+} from './report-worker.js';
 export type { ReportProgress } from './report-worker.js';
-export type { ColumnVisualBuildRequest } from './report-worker.js';
-export type { ColumnVisualInput } from './pdf-writer.js';
+export type { ColumnVisualBuildRequest, CellCommentaryBuildRequest } from './report-worker.js';
+export type { ColumnVisualInput, ReportTableSection } from './pdf-writer.js';
 
 export interface GenerateReportResult {
 	pdfBytes: Uint8Array;
@@ -178,6 +183,88 @@ export function generateColumnVisualReport(
 		const copy = request.fileBytes.slice(0);
 		worker.postMessage(
 			{ type: 'build-column-visual', id, request: { ...request, fileBytes: copy } },
+			[copy]
+		);
+	});
+
+	return {
+		promise,
+		cancel: () => {
+			cancelled = true;
+			cleanup();
+		}
+	};
+}
+
+export interface GenerateCellCommentaryResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	sha256Full: string;
+}
+
+export interface GenerateCellCommentaryHandle {
+	promise: Promise<GenerateCellCommentaryResult>;
+	cancel: () => void;
+}
+
+/**
+ * Run "Your Cell Commentary Report" build in a Web Worker. The table
+ * section (notes + cell content + row numbers, newest-first) is already
+ * built by the caller via cell-commentary-report.ts's pure helpers — the
+ * worker only lays out, draws, and saves the PDF. Same `{ promise, cancel }`
+ * + progress-callback shape as the other two report types.
+ */
+export function generateCellCommentaryReport(
+	request: CellCommentaryBuildRequest,
+	onProgress?: (progress: ReportProgress) => void
+): GenerateCellCommentaryHandle {
+	let worker: Worker;
+	try {
+		worker = new Worker(new URL('./report-worker.ts', import.meta.url), { type: 'module' });
+	} catch (err) {
+		return {
+			promise: Promise.reject(
+				err instanceof Error ? err : new Error('Failed to start the report worker')
+			),
+			cancel: () => {}
+		};
+	}
+
+	const id = newId('report');
+	let cancelled = false;
+	const cleanup = () => worker.terminate();
+
+	const promise = new Promise<GenerateCellCommentaryResult>((resolve, reject) => {
+		worker.onmessage = (event: MessageEvent) => {
+			const msg = event.data;
+			if (!msg || msg.id !== id || cancelled) return;
+			switch (msg.type) {
+				case 'progress':
+					onProgress?.({ stage: msg.stage, processed: msg.processed, total: msg.total });
+					break;
+				case 'done':
+					cleanup();
+					resolve({
+						pdfBytes: msg.pdfBytes,
+						replacedCharacterCount: msg.replacedCharacterCount,
+						sha256Full: msg.sha256Full
+					});
+					break;
+				case 'error':
+					cleanup();
+					reject(new Error(msg.message ?? 'Report generation failed'));
+					break;
+			}
+		};
+		worker.onerror = (e) => {
+			if (cancelled) return;
+			cleanup();
+			reject(new Error(e.message ?? 'Report worker crashed'));
+		};
+
+		const copy = request.fileBytes.slice(0);
+		worker.postMessage(
+			{ type: 'build-cell-commentary', id, request: { ...request, fileBytes: copy } },
 			[copy]
 		);
 	});

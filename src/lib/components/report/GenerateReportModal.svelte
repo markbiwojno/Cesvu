@@ -19,10 +19,13 @@
 	import {
 		generateReport,
 		generateColumnVisualReport,
+		generateCellCommentaryReport,
 		type GenerateReportResult,
 		type GenerateReportHandle,
 		type GenerateColumnVisualResult,
 		type GenerateColumnVisualHandle,
+		type GenerateCellCommentaryResult,
+		type GenerateCellCommentaryHandle,
 		type ReportProgress,
 		type ColumnVisualInput
 	} from '$lib/report/generate-report.js';
@@ -39,14 +42,20 @@
 	import { renderColumnCharts } from '$lib/report/column-chart-renderer.js';
 	import { formatStatSummary } from '$lib/report/column-visual-report.js';
 	import { computeColumnStats } from '$lib/pipeline/columnStats.js';
+	import { notesStore } from '$lib/stores/notesStore.svelte.js';
+	import {
+		buildCellCommentaryRows,
+		buildCellCommentarySection,
+		sheetsWithCellNotes
+	} from '$lib/report/cell-commentary-report.js';
 
 	interface Props {
 		onclose: () => void;
 	}
 	let { onclose }: Props = $props();
 
-	type ReportType = 'summary' | 'column-visual' | 'batch' | 'data-review';
-	type Phase = 'type' | 'options' | 'column-visual-options' | 'generating' | 'done' | 'error';
+	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'batch' | 'data-review';
+	type Phase = 'type' | 'options' | 'column-visual-options' | 'cell-commentary-options' | 'generating' | 'done' | 'error';
 
 	let phase = $state<Phase>('type');
 	let reportType = $state<ReportType>('summary');
@@ -129,6 +138,20 @@
 		visualColumns = visualColumns.filter((v) => v.column !== name);
 	}
 
+	// ── Cell Commentary Report state ─────────────────────────────────────
+	// Only cell-anchored notes qualify (prose notes have no sheet/column/row
+	// to report). Column-level notes (rowIndex === -1) are included per
+	// requirement. Sheet picker: 'all' or one specific sheet name.
+	const cellNotes = $derived(notesStore.notes.filter((n) => n.anchor.kind === 'cell'));
+	const hasCellNotes = $derived(cellNotes.length > 0);
+	const cellNoteSheets = $derived(sheetsWithCellNotes(cellNotes));
+	let cellCommentarySheetFilter = $state<string>('all');
+
+	const cellCommentaryPreviewCount = $derived.by(() => {
+		const filter = cellCommentarySheetFilter === 'all' ? null : cellCommentarySheetFilter;
+		return cellNotes.filter((n) => filter === null || (n.anchor.kind === 'cell' && n.anchor.sheet === filter)).length;
+	});
+
 	// ── Options state ────────────────────────────────────────────────────
 	let groupByColumn = $state<string | null>(null);
 	let aggregations = $state<Record<string, AggregationChoice>>({});
@@ -207,7 +230,7 @@
 	);
 	const progressPercent = $derived(progressTotal > 0 ? Math.round((progressProcessed / progressTotal) * 100) : null);
 
-	let activeHandle: GenerateReportHandle | GenerateColumnVisualHandle | null = null;
+	let activeHandle: GenerateReportHandle | GenerateColumnVisualHandle | GenerateCellCommentaryHandle | null = null;
 	let visualResult = $state<GenerateColumnVisualResult | null>(null);
 
 	async function generate() {
@@ -338,17 +361,76 @@
 		}
 	}
 
+	let cellCommentaryResult = $state<GenerateCellCommentaryResult | null>(null);
+
+	async function generateCellCommentary() {
+		const file = workspace.file;
+		if (!file || !hasCellNotes) return;
+
+		phase = 'generating';
+		progressStage = 'reading';
+		progressProcessed = 0;
+		progressTotal = 0;
+		try {
+			const filter = cellCommentarySheetFilter === 'all' ? null : cellCommentarySheetFilter;
+			const rows = buildCellCommentaryRows(cellNotes, workbook?.sheets ?? [], filter);
+			const section = buildCellCommentarySection(rows);
+
+			const handle = generateCellCommentaryReport(
+				{
+					fileName: file.name,
+					title: `${file.name} — Your Cell Commentary Report`,
+					pageSize,
+					generatedAtDisplay: new Date().toLocaleString(),
+					fileBytes: file.rawContent,
+					section
+				},
+				(progress) => {
+					progressStage = progress.stage;
+					progressProcessed = progress.processed;
+					progressTotal = progress.total;
+				}
+			);
+			activeHandle = handle;
+			cellCommentaryResult = await handle.promise;
+			activeHandle = null;
+			downloadPdf();
+			phase = 'done';
+		} catch (err) {
+			activeHandle = null;
+			if (phase === 'generating') {
+				error = err instanceof Error ? err.message : String(err);
+				phase = 'error';
+			}
+		}
+	}
+
 	function cancelGenerate() {
 		activeHandle?.cancel();
 		activeHandle = null;
 		renderingCharts = false;
-		phase = reportType === 'column-visual' ? 'column-visual-options' : 'options';
+		phase =
+			reportType === 'column-visual'
+				? 'column-visual-options'
+				: reportType === 'cell-commentary'
+					? 'cell-commentary-options'
+					: 'options';
 	}
 
 	function downloadPdf() {
-		const bytes = reportType === 'column-visual' ? visualResult?.pdfBytes : result?.pdfBytes;
+		const bytes =
+			reportType === 'column-visual'
+				? visualResult?.pdfBytes
+				: reportType === 'cell-commentary'
+					? cellCommentaryResult?.pdfBytes
+					: result?.pdfBytes;
 		if (!bytes) return;
-		const suffix = reportType === 'column-visual' ? 'column-visual-analysis' : 'summary-report';
+		const suffix =
+			reportType === 'column-visual'
+				? 'column-visual-analysis'
+				: reportType === 'cell-commentary'
+					? 'cell-commentary-report'
+					: 'summary-report';
 		const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
@@ -393,6 +475,29 @@
 					header with page-by-page tables.
 				</p>
 			</button>
+
+			{#if hasCellNotes}
+				<button
+					type="button"
+					onclick={() => { reportType = 'cell-commentary'; phase = 'cell-commentary-options'; }}
+					class="w-full text-left p-4 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+				>
+					<div class="font-semibold text-sm text-gray-900 dark:text-white">Your Cell Commentary Report</div>
+					<p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+						Every cell-anchored note you've left — note content, cell content, and row
+						number — newest first.
+					</p>
+				</button>
+			{:else}
+				<div class="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-slate-800 opacity-60 cursor-not-allowed">
+					<div class="flex items-center gap-2">
+						<span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Your Cell Commentary Report</span>
+					</div>
+					<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+						Right-click a cell and "Add note" to unlock this report.
+					</p>
+				</div>
+			{/if}
 
 			<div class="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-slate-800 opacity-60 cursor-not-allowed">
 				<div class="flex items-center gap-2">
@@ -513,6 +618,33 @@
 					{/if}
 				</div>
 			{/each}
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Page size</span>
+				<select bind:value={pageSize} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="Letter">Letter</option>
+					<option value="A4">A4</option>
+				</select>
+			</label>
+		</div>
+	{:else if phase === 'cell-commentary-options'}
+		<div class="space-y-4">
+			{#if cellNoteSheets.length > 1}
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Sheet</span>
+					<select bind:value={cellCommentarySheetFilter} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+						<option value="all">All sheets</option>
+						{#each cellNoteSheets as s (s)}
+							<option value={s}>{s}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+
+			<p class="text-sm text-gray-600 dark:text-gray-400">
+				{cellCommentaryPreviewCount.toLocaleString()} note{cellCommentaryPreviewCount === 1 ? '' : 's'}
+				will be included, newest first.
+			</p>
 
 			<label class="block">
 				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Page size</span>
@@ -650,7 +782,16 @@
 	{:else if phase === 'error'}
 		<div class="space-y-4 py-4">
 			<p class="text-sm text-red-600 dark:text-red-300">{error}</p>
-			<button onclick={reportType === 'column-visual' ? generateColumnVisual : generate} class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700">
+			<button
+				onclick={
+					reportType === 'column-visual'
+						? generateColumnVisual
+						: reportType === 'cell-commentary'
+							? generateCellCommentary
+							: generate
+				}
+				class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
+			>
 				Try again
 			</button>
 		</div>
@@ -658,7 +799,7 @@
 		<div class="flex flex-col items-center justify-center gap-3 py-8 text-center">
 			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40 text-2xl">✓</div>
 			<p class="text-sm font-medium text-gray-900 dark:text-white">Your report is downloading.</p>
-			{#if result && reportType !== 'column-visual' && result.replacedCharacterCount > 0}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && result.replacedCharacterCount > 0}
 				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
 					{result.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were replaced
 					with "?" — likely a non-Latin script (e.g. Japanese, Arabic) this report doesn't yet support.
@@ -670,7 +811,13 @@
 					with "?" — likely a non-Latin script this report doesn't yet support.
 				</p>
 			{/if}
-			{#if result && reportType !== 'column-visual'}
+			{#if cellCommentaryResult && reportType === 'cell-commentary' && cellCommentaryResult.replacedCharacterCount > 0}
+				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
+					{cellCommentaryResult.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were
+					replaced with "?" — likely a non-Latin script this report doesn't yet support.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary'}
 				{#each result.warnings as w (w)}
 					<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">⚠ {w}</p>
 				{/each}
@@ -687,6 +834,19 @@
 				<button
 					onclick={generateColumnVisual}
 					disabled={visualColumns.length === 0}
+					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					Generate
+				</button>
+			</div>
+		{:else if phase === 'cell-commentary-options'}
+			<div class="flex justify-between gap-2">
+				<button onclick={() => (phase = 'type')} class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+					Back
+				</button>
+				<button
+					onclick={generateCellCommentary}
+					disabled={cellCommentaryPreviewCount === 0}
 					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					Generate

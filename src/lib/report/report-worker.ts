@@ -86,6 +86,29 @@ export interface ColumnVisualBuildResult {
 	sha256Full: string;
 }
 
+/**
+ * Request for "Your Cell Commentary Report". The caller (generate-report.ts)
+ * has already built the table rows via cell-commentary-report.ts's pure
+ * helpers (cheap — no DOM, no Worker needed for that part); this worker
+ * only lays out, draws, and saves the PDF, same division of labor as the
+ * other two report types.
+ */
+export interface CellCommentaryBuildRequest {
+	fileName: string;
+	title: string;
+	pageSize: 'Letter' | 'A4';
+	generatedAtDisplay: string;
+	/** Original, uncapped file bytes — used only for the SHA-256 footer hash. */
+	fileBytes: ArrayBuffer;
+	section: ReportTableSection;
+}
+
+export interface CellCommentaryBuildResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	sha256Full: string;
+}
+
 /** Build stage reported to the caller — drives the modal's progress UI. */
 export type ReportBuildStage = 'reading' | 'preparing' | 'grouping' | 'drawing' | 'saving';
 
@@ -409,6 +432,56 @@ export async function buildColumnVisualReport(
 	return { pdfBytes: bytes, replacedCharacterCount, sha256Full };
 }
 
+/**
+ * Build pipeline for "Your Cell Commentary Report". The table section
+ * (Sheet/Column/Row/Cell Content/Note, newest-first) is already built by
+ * the caller via cell-commentary-report.ts's pure helpers — this function
+ * just hashes the file, wraps it as a single-section ReportPdfInput, and
+ * draws it with the same table renderer the Summary Report uses.
+ */
+export async function buildCellCommentaryReport(
+	request: CellCommentaryBuildRequest,
+	fontBytesOverride?: { regular: ArrayBuffer; bold: ArrayBuffer },
+	onProgress?: (progress: ReportProgress) => void
+): Promise<CellCommentaryBuildResult> {
+	onProgress?.({ stage: 'reading', processed: 0, total: 0 });
+	const sha256Full = await sha256Hex(request.fileBytes);
+	onProgress?.({ stage: 'reading', processed: 1, total: 1 });
+
+	const { regular: regularBytes, bold: boldBytes } =
+		fontBytesOverride ??
+		(await (async () => {
+			const [regular, bold] = await Promise.all([
+				fetchFontBytes(notoRegularUrl),
+				fetchFontBytes(notoBoldUrl)
+			]);
+			return { regular, bold };
+		})());
+
+	const pdfInput: ReportPdfInput = {
+		title: request.title,
+		fileName: request.fileName,
+		generatedAtDisplay: request.generatedAtDisplay,
+		sha256Full,
+		settingsLines: [`Notes: ${request.section.lines.length.toLocaleString()}`, `SHA-256: ${sha256Full}`],
+		kpiLines: [],
+		warnings: [],
+		pageSize: request.pageSize,
+		sections: [request.section]
+	};
+
+	const { bytes, replacedCharacterCount } = await buildReportPdf(
+		pdfInput,
+		{ regular: regularBytes, bold: boldBytes },
+		(drawn, total) => {
+			if (drawn >= total) onProgress?.({ stage: 'saving', processed: 0, total: 0 });
+			else onProgress?.({ stage: 'drawing', processed: drawn, total });
+		}
+	);
+
+	return { pdfBytes: bytes, replacedCharacterCount, sha256Full };
+}
+
 // ============================================================
 // Worker protocol — only wired up when actually running as a Worker.
 // Guarded so this module can also be imported directly in tests/Node.
@@ -418,10 +491,29 @@ if (typeof self !== 'undefined' && typeof (self as unknown as { postMessage?: un
 		const msg = event.data as {
 			type: string;
 			id: string;
-			request?: ReportBuildRequest | ColumnVisualBuildRequest;
+			request?: ReportBuildRequest | ColumnVisualBuildRequest | CellCommentaryBuildRequest;
 		};
 		if (msg?.type === 'build-column-visual' && msg.request) {
 			buildColumnVisualReport(msg.request as ColumnVisualBuildRequest, undefined, (progress) => {
+				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
+			})
+				.then((result) => {
+					(self as unknown as Worker).postMessage(
+						{ type: 'done', id: msg.id, ...result },
+						[result.pdfBytes.buffer]
+					);
+				})
+				.catch((err) => {
+					(self as unknown as Worker).postMessage({
+						type: 'error',
+						id: msg.id,
+						message: err instanceof Error ? err.message : String(err)
+					});
+				});
+			return;
+		}
+		if (msg?.type === 'build-cell-commentary' && msg.request) {
+			buildCellCommentaryReport(msg.request as CellCommentaryBuildRequest, undefined, (progress) => {
 				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
 			})
 				.then((result) => {
