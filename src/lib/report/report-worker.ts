@@ -107,7 +107,7 @@ async function reparseSource(request: ReportBuildRequest): Promise<ParsedSheet> 
 		return { headers, csvCells: result.data };
 	}
 
-	const XLSX = (await import('xlsx')).default;
+	const XLSX = await import('xlsx');
 	const wb = XLSX.read(new Uint8Array(request.fileBytes), {
 		type: 'array',
 		cellNF: true,
@@ -180,7 +180,7 @@ async function buildRows(
 /** Column-by-column date detection (Excel only — CSV has no format codes). */
 async function detectDateColumns(sheet: ParsedSheet): Promise<string[]> {
 	if (!sheet.xlsxCells) return [];
-	const XLSX = (await import('xlsx')).default;
+	const XLSX = await import('xlsx');
 	const isDateFormat = (z: string) => XLSX.SSF.is_date(z);
 	return sheet.headers.filter((h) =>
 		columnLooksLikeDate(sheet.xlsxCells!.map((row) => row[h]), isDateFormat)
@@ -255,7 +255,7 @@ export async function buildReport(
 		detail: request.detail
 	});
 
-	const XLSX = sheet.xlsxCells ? (await import('xlsx')).default : null;
+	const XLSX = sheet.xlsxCells ? await import('xlsx') : null;
 	const formatTotal = makeFormatTotal(sheet, XLSX);
 	const aggregatedColumns = columnAggregations
 		.filter((s) => s.aggregation !== 'none')
