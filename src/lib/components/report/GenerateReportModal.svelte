@@ -94,22 +94,34 @@
 		)
 	);
 
+	/** Shared default-config construction so addVisualColumn() and
+	 *  addAllVisualColumns() never drift out of sync. */
+	function makeVisualColumnEntry(profile: { name: string; type: VisualColumnEntry['columnType'] }): VisualColumnEntry {
+		return {
+			column: profile.name,
+			columnType: profile.type,
+			chartType: defaultChartType(profile.type),
+			title: profile.name,
+			color: CHART_DEFAULT_COLOR,
+			topN: 10,
+			sort: 'count-desc',
+			binCount: 20
+		};
+	}
+
 	function addVisualColumn(name: string) {
 		const profile = activeSheetProfile?.columns.find((c) => c.name === name);
 		if (!profile) return;
-		visualColumns = [
-			...visualColumns,
-			{
-				column: name,
-				columnType: profile.type,
-				chartType: defaultChartType(profile.type),
-				title: name,
-				color: CHART_DEFAULT_COLOR,
-				topN: 10,
-				sort: 'count-desc',
-				binCount: 20
-			}
-		];
+		visualColumns = [...visualColumns, makeVisualColumnEntry(profile)];
+		visualColumnToAdd = '';
+	}
+
+	/** Add every column not already added, each with its own default chart
+	 *  config (same defaults as adding one-by-one) — in a single state
+	 *  update so the UI doesn't re-render once per column. */
+	function addAllVisualColumns() {
+		if (availableColumnsToAdd.length === 0) return;
+		visualColumns = [...visualColumns, ...availableColumnsToAdd.map(makeVisualColumnEntry)];
 		visualColumnToAdd = '';
 	}
 
@@ -411,19 +423,30 @@
 				</label>
 			{/if}
 
-			<label class="block">
-				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Add a column</span>
-				<select
-					bind:value={visualColumnToAdd}
-					onchange={() => visualColumnToAdd && addVisualColumn(visualColumnToAdd)}
-					class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5"
+			<div class="flex items-end gap-2">
+				<label class="flex-1 block">
+					<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Add a column</span>
+					<select
+						bind:value={visualColumnToAdd}
+						onchange={() => visualColumnToAdd && addVisualColumn(visualColumnToAdd)}
+						disabled={availableColumnsToAdd.length === 0}
+						class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5 disabled:opacity-50"
+					>
+						<option value="">Choose a column…</option>
+						{#each availableColumnsToAdd as c (c.name)}
+							<option value={c.name}>{c.name} ({c.type})</option>
+						{/each}
+					</select>
+				</label>
+				<button
+					type="button"
+					onclick={addAllVisualColumns}
+					disabled={availableColumnsToAdd.length === 0}
+					class="rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3 py-1.5 text-xs font-medium text-gray-700 dark:text-gray-200 transition-colors hover:bg-gray-100 dark:hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
 				>
-					<option value="">Choose a column…</option>
-					{#each availableColumnsToAdd as c (c.name)}
-						<option value={c.name}>{c.name} ({c.type})</option>
-					{/each}
-				</select>
-			</label>
+					Add all columns{availableColumnsToAdd.length > 0 ? ` (${availableColumnsToAdd.length})` : ''}
+				</button>
+			</div>
 
 			{#if visualColumns.length === 0}
 				<p class="text-xs text-gray-500 dark:text-gray-400">
