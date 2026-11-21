@@ -20,12 +20,15 @@
 		generateReport,
 		generateColumnVisualReport,
 		generateCellCommentaryReport,
+		generateDuplicationReport,
 		type GenerateReportResult,
 		type GenerateReportHandle,
 		type GenerateColumnVisualResult,
 		type GenerateColumnVisualHandle,
 		type GenerateCellCommentaryResult,
 		type GenerateCellCommentaryHandle,
+		type GenerateDuplicationResult,
+		type GenerateDuplicationHandle,
 		type ReportProgress,
 		type ColumnVisualInput
 	} from '$lib/report/generate-report.js';
@@ -48,14 +51,23 @@
 		buildCellCommentarySection,
 		sheetsWithCellNotes
 	} from '$lib/report/cell-commentary-report.js';
+	import type { DuplicationDetail } from '$lib/report/duplication-report.js';
 
 	interface Props {
 		onclose: () => void;
 	}
 	let { onclose }: Props = $props();
 
-	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'batch' | 'data-review';
-	type Phase = 'type' | 'options' | 'column-visual-options' | 'cell-commentary-options' | 'generating' | 'done' | 'error';
+	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'duplication' | 'batch';
+	type Phase =
+		| 'type'
+		| 'options'
+		| 'column-visual-options'
+		| 'cell-commentary-options'
+		| 'duplication-options'
+		| 'generating'
+		| 'done'
+		| 'error';
 
 	let phase = $state<Phase>('type');
 	let reportType = $state<ReportType>('summary');
@@ -152,6 +164,53 @@
 		return cellNotes.filter((n) => filter === null || (n.anchor.kind === 'cell' && n.anchor.sheet === filter)).length;
 	});
 
+	// ── Data Duplication Report state ────────────────────────────────────
+	// Key columns are selected via checkboxes (at least one required).
+	// Case/whitespace normalization default ON. Detail defaults to compact
+	// (key columns + row count + row numbers); "full row detail" expands
+	// each group to show every column for every duplicated row.
+	let duplicationKeyColumns = $state<Set<string>>(new Set());
+	let duplicationCaseInsensitive = $state(true);
+	let duplicationTrimWhitespace = $state(true);
+	let duplicationDetail = $state<DuplicationDetail>('compact');
+
+	function toggleDuplicationKeyColumn(name: string) {
+		const next = new Set(duplicationKeyColumns);
+		if (next.has(name)) next.delete(name);
+		else next.add(name);
+		duplicationKeyColumns = next;
+	}
+
+	/** Live preview over the already-loaded display buffer — same
+	 *  instant-feedback pattern as groupCountPreview below. Re-parses
+	 *  nothing; just enough to tell the user roughly what to expect before
+	 *  they commit to the full (worker-side, original-bytes) build. */
+	const duplicationPreview = $derived.by(() => {
+		const sheet = workbook?.sheets.find((s) => s.name === selectedSheetName);
+		const keyColumns = [...duplicationKeyColumns];
+		if (!sheet || keyColumns.length === 0) return { groupCount: 0, rowCount: 0 };
+		const normalize = (v: string) => {
+			let s = v;
+			if (duplicationTrimWhitespace) s = s.trim().replace(/\s+/g, ' ');
+			if (duplicationCaseInsensitive) s = s.toLowerCase();
+			return s;
+		};
+		const byKey = new Map<string, number>();
+		for (const row of sheet.rows) {
+			const key = keyColumns.map((c) => normalize(row[c] ?? '')).join('\u0001');
+			byKey.set(key, (byKey.get(key) ?? 0) + 1);
+		}
+		let groupCount = 0;
+		let rowCount = 0;
+		for (const count of byKey.values()) {
+			if (count > 1) {
+				groupCount++;
+				rowCount += count;
+			}
+		}
+		return { groupCount, rowCount };
+	});
+
 	// ── Options state ────────────────────────────────────────────────────
 	let groupByColumn = $state<string | null>(null);
 	let aggregations = $state<Record<string, AggregationChoice>>({});
@@ -230,7 +289,12 @@
 	);
 	const progressPercent = $derived(progressTotal > 0 ? Math.round((progressProcessed / progressTotal) * 100) : null);
 
-	let activeHandle: GenerateReportHandle | GenerateColumnVisualHandle | GenerateCellCommentaryHandle | null = null;
+	let activeHandle:
+		| GenerateReportHandle
+		| GenerateColumnVisualHandle
+		| GenerateCellCommentaryHandle
+		| GenerateDuplicationHandle
+		| null = null;
 	let visualResult = $state<GenerateColumnVisualResult | null>(null);
 
 	async function generate() {
@@ -405,6 +469,51 @@
 		}
 	}
 
+	let duplicationResult = $state<GenerateDuplicationResult | null>(null);
+
+	async function generateDuplication() {
+		const file = workspace.file;
+		if (!file || !selectedSheetName || duplicationKeyColumns.size === 0) return;
+
+		phase = 'generating';
+		progressStage = 'reading';
+		progressProcessed = 0;
+		progressTotal = 0;
+		try {
+			const handle = generateDuplicationReport(
+				{
+					fileName: file.name,
+					sourceType: isExcel ? 'excel' : 'csv',
+					fileBytes: file.rawContent,
+					sheetName: selectedSheetName,
+					title: `${file.name} — Data Duplication Report`,
+					keyColumns: [...duplicationKeyColumns],
+					caseInsensitive: duplicationCaseInsensitive,
+					trimWhitespace: duplicationTrimWhitespace,
+					detail: duplicationDetail,
+					pageSize,
+					generatedAtDisplay: new Date().toLocaleString()
+				},
+				(progress) => {
+					progressStage = progress.stage;
+					progressProcessed = progress.processed;
+					progressTotal = progress.total;
+				}
+			);
+			activeHandle = handle;
+			duplicationResult = await handle.promise;
+			activeHandle = null;
+			downloadPdf();
+			phase = 'done';
+		} catch (err) {
+			activeHandle = null;
+			if (phase === 'generating') {
+				error = err instanceof Error ? err.message : String(err);
+				phase = 'error';
+			}
+		}
+	}
+
 	function cancelGenerate() {
 		activeHandle?.cancel();
 		activeHandle = null;
@@ -414,7 +523,9 @@
 				? 'column-visual-options'
 				: reportType === 'cell-commentary'
 					? 'cell-commentary-options'
-					: 'options';
+					: reportType === 'duplication'
+						? 'duplication-options'
+						: 'options';
 	}
 
 	function downloadPdf() {
@@ -423,14 +534,18 @@
 				? visualResult?.pdfBytes
 				: reportType === 'cell-commentary'
 					? cellCommentaryResult?.pdfBytes
-					: result?.pdfBytes;
+					: reportType === 'duplication'
+						? duplicationResult?.pdfBytes
+						: result?.pdfBytes;
 		if (!bytes) return;
 		const suffix =
 			reportType === 'column-visual'
 				? 'column-visual-analysis'
 				: reportType === 'cell-commentary'
 					? 'cell-commentary-report'
-					: 'summary-report';
+					: reportType === 'duplication'
+						? 'data-duplication-report'
+						: 'summary-report';
 		const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
@@ -507,13 +622,17 @@
 				<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">One PDF per row or group — invoices, statements, pay stubs.</p>
 			</div>
 
-			<div class="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-slate-800 opacity-60 cursor-not-allowed">
-				<div class="flex items-center gap-2">
-					<span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Data Review</span>
-					<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 text-gray-600 dark:bg-slate-800 dark:text-gray-400">Coming soon</span>
-				</div>
-				<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">Duplicates, outliers, and rule-based flags.</p>
-			</div>
+			<button
+				type="button"
+				onclick={() => { reportType = 'duplication'; phase = 'duplication-options'; }}
+				class="w-full text-left p-4 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+			>
+				<div class="font-semibold text-sm text-gray-900 dark:text-white">Data Duplication Report</div>
+				<p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+					Pick one or more columns to match on and find rows that are duplicates
+					of each other.
+				</p>
+			</button>
 		</div>
 	{:else if phase === 'column-visual-options'}
 		<div class="space-y-4">
@@ -654,6 +773,74 @@
 				</select>
 			</label>
 		</div>
+	{:else if phase === 'duplication-options'}
+		<div class="space-y-4">
+			{#if isExcel && workbook && workbook.sheets.length > 1}
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Sheet</span>
+					<select bind:value={selectedSheetName} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+						{#each workbook.sheets as s (s.name)}
+							<option value={s.name}>{s.name}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+
+			<div>
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Match on these columns</span>
+				<div class="mt-1 space-y-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 dark:border-slate-800 p-2">
+					{#each headers as h (h)}
+						<label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+							<input
+								type="checkbox"
+								checked={duplicationKeyColumns.has(h)}
+								onchange={() => toggleDuplicationKeyColumn(h)}
+								class="rounded border-gray-300 dark:border-slate-700"
+							/>
+							<span class="truncate" title={h}>{h}</span>
+						</label>
+					{/each}
+				</div>
+				{#if duplicationKeyColumns.size === 0}
+					<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">Select at least one column.</p>
+				{/if}
+			</div>
+
+			<div class="flex gap-4">
+				<label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+					<input type="checkbox" bind:checked={duplicationCaseInsensitive} class="rounded border-gray-300 dark:border-slate-700" />
+					Ignore case
+				</label>
+				<label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+					<input type="checkbox" bind:checked={duplicationTrimWhitespace} class="rounded border-gray-300 dark:border-slate-700" />
+					Ignore extra whitespace
+				</label>
+			</div>
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Report detail</span>
+				<select bind:value={duplicationDetail} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="compact">Compact (key columns + row numbers)</option>
+					<option value="full">Full row detail (every column for every duplicated row)</option>
+				</select>
+			</label>
+
+			{#if duplicationKeyColumns.size > 0}
+				<p class="text-sm text-gray-600 dark:text-gray-400">
+					{duplicationPreview.groupCount.toLocaleString()} duplicate group{duplicationPreview.groupCount === 1 ? '' : 's'}
+					found ({duplicationPreview.rowCount.toLocaleString()} row{duplicationPreview.rowCount === 1 ? '' : 's'} total).
+				</p>
+			{/if}
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Page size</span>
+				<select bind:value={pageSize} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="Letter">Letter</option>
+					<option value="A4">A4</option>
+				</select>
+			</label>
+		</div>
+
 	{:else if phase === 'options'}
 		<div class="space-y-4">
 			{#if isExcel && workbook && workbook.sheets.length > 1}
@@ -788,7 +975,9 @@
 						? generateColumnVisual
 						: reportType === 'cell-commentary'
 							? generateCellCommentary
-							: generate
+							: reportType === 'duplication'
+								? generateDuplication
+								: generate
 				}
 				class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
 			>
@@ -799,7 +988,13 @@
 		<div class="flex flex-col items-center justify-center gap-3 py-8 text-center">
 			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40 text-2xl">✓</div>
 			<p class="text-sm font-medium text-gray-900 dark:text-white">Your report is downloading.</p>
-			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && result.replacedCharacterCount > 0}
+			{#if duplicationResult && reportType === 'duplication'}
+				<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">
+					{duplicationResult.groupCount.toLocaleString()} duplicate group{duplicationResult.groupCount === 1 ? '' : 's'}
+					({duplicationResult.duplicateRowCount.toLocaleString()} row{duplicationResult.duplicateRowCount === 1 ? '' : 's'}).
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && result.replacedCharacterCount > 0}
 				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
 					{result.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were replaced
 					with "?" — likely a non-Latin script (e.g. Japanese, Arabic) this report doesn't yet support.
@@ -817,7 +1012,13 @@
 					replaced with "?" — likely a non-Latin script this report doesn't yet support.
 				</p>
 			{/if}
-			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary'}
+			{#if duplicationResult && reportType === 'duplication' && duplicationResult.replacedCharacterCount > 0}
+				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
+					{duplicationResult.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were
+					replaced with "?" — likely a non-Latin script this report doesn't yet support.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication'}
 				{#each result.warnings as w (w)}
 					<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">⚠ {w}</p>
 				{/each}
@@ -847,6 +1048,19 @@
 				<button
 					onclick={generateCellCommentary}
 					disabled={cellCommentaryPreviewCount === 0}
+					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					Generate
+				</button>
+			</div>
+		{:else if phase === 'duplication-options'}
+			<div class="flex justify-between gap-2">
+				<button onclick={() => (phase = 'type')} class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+					Back
+				</button>
+				<button
+					onclick={generateDuplication}
+					disabled={duplicationKeyColumns.size === 0}
 					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					Generate

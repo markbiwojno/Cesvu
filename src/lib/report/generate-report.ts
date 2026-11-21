@@ -10,10 +10,15 @@ import type {
 	ReportBuildRequest,
 	ReportProgress,
 	ColumnVisualBuildRequest,
-	CellCommentaryBuildRequest
+	CellCommentaryBuildRequest,
+	DuplicationBuildRequest
 } from './report-worker.js';
 export type { ReportProgress } from './report-worker.js';
-export type { ColumnVisualBuildRequest, CellCommentaryBuildRequest } from './report-worker.js';
+export type {
+	ColumnVisualBuildRequest,
+	CellCommentaryBuildRequest,
+	DuplicationBuildRequest
+} from './report-worker.js';
 export type { ColumnVisualInput, ReportTableSection } from './pdf-writer.js';
 
 export interface GenerateReportResult {
@@ -265,6 +270,95 @@ export function generateCellCommentaryReport(
 		const copy = request.fileBytes.slice(0);
 		worker.postMessage(
 			{ type: 'build-cell-commentary', id, request: { ...request, fileBytes: copy } },
+			[copy]
+		);
+	});
+
+	return {
+		promise,
+		cancel: () => {
+			cancelled = true;
+			cleanup();
+		}
+	};
+}
+
+export interface GenerateDuplicationResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	groupCount: number;
+	duplicateRowCount: number;
+	sha256Full: string;
+}
+
+export interface GenerateDuplicationHandle {
+	promise: Promise<GenerateDuplicationResult>;
+	cancel: () => void;
+}
+
+/**
+ * Run the "Data Duplication Report" build in a Web Worker. Unlike the
+ * Column Visual / Cell Commentary reports, this one re-parses the ORIGINAL
+ * file itself inside the worker (same reparseSource()/buildRows() pipeline
+ * as the Summary Report) — duplicate detection must see every row. Same
+ * `{ promise, cancel }` + progress-callback shape as the other three.
+ */
+export function generateDuplicationReport(
+	request: DuplicationBuildRequest,
+	onProgress?: (progress: ReportProgress) => void
+): GenerateDuplicationHandle {
+	let worker: Worker;
+	try {
+		worker = new Worker(new URL('./report-worker.ts', import.meta.url), { type: 'module' });
+	} catch (err) {
+		return {
+			promise: Promise.reject(
+				err instanceof Error ? err : new Error('Failed to start the report worker')
+			),
+			cancel: () => {}
+		};
+	}
+
+	const id = newId('report');
+	let cancelled = false;
+	const cleanup = () => worker.terminate();
+
+	const promise = new Promise<GenerateDuplicationResult>((resolve, reject) => {
+		worker.onmessage = (event: MessageEvent) => {
+			const msg = event.data;
+			if (!msg || msg.id !== id || cancelled) return;
+			switch (msg.type) {
+				case 'progress':
+					onProgress?.({ stage: msg.stage, processed: msg.processed, total: msg.total });
+					break;
+				case 'done':
+					cleanup();
+					resolve({
+						pdfBytes: msg.pdfBytes,
+						replacedCharacterCount: msg.replacedCharacterCount,
+						groupCount: msg.groupCount,
+						duplicateRowCount: msg.duplicateRowCount,
+						sha256Full: msg.sha256Full
+					});
+					break;
+				case 'error':
+					cleanup();
+					reject(new Error(msg.message ?? 'Report generation failed'));
+					break;
+			}
+		};
+		worker.onerror = (e) => {
+			if (cancelled) return;
+			cleanup();
+			reject(new Error(e.message ?? 'Report worker crashed'));
+		};
+
+		// Copy the bytes (slice(0)) before transferring — the ORIGINAL
+		// ArrayBuffer backing workspace.file.rawContent must stay usable by
+		// the rest of the app after this call.
+		const copy = request.fileBytes.slice(0);
+		worker.postMessage(
+			{ type: 'build-duplication', id, request: { ...request, fileBytes: copy } },
 			[copy]
 		);
 	});

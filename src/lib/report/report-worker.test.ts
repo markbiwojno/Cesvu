@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildReport, type ReportBuildRequest } from './report-worker.js';
+import { buildReport, buildDuplicationReport, type ReportBuildRequest, type DuplicationBuildRequest } from './report-worker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fontBytesOverride: { regular: ArrayBuffer; bold: ArrayBuffer };
@@ -16,6 +16,7 @@ let fontBytesOverride: { regular: ArrayBuffer; bold: ArrayBuffer };
  */
 
 let xlsxFixtureBytes: ArrayBuffer;
+let xlsxDuplicatesFixtureBytes: ArrayBuffer;
 
 beforeAll(async () => {
 	const XLSX = (await import('xlsx')).default;
@@ -48,7 +49,44 @@ beforeAll(async () => {
 		regular: toArrayBuffer(readFileSync(join(__dirname, 'fonts/NotoSans-Regular.ttf'))),
 		bold: toArrayBuffer(readFileSync(join(__dirname, 'fonts/NotoSans-Bold.ttf')))
 	};
+
+	// A second fixture with a known duplicate pair (rows 1 and 3, both
+	// "Alice"/"alice " after normalization) plus a unique row (Bob), for
+	// the Data Duplication Report tests.
+	const dupWs: Record<string, unknown> = {
+		'!ref': 'A1:B4',
+		A1: { t: 's', v: 'Name' },
+		B1: { t: 's', v: 'City' },
+		A2: { t: 's', v: 'Alice' },
+		B2: { t: 's', v: 'NYC' },
+		A3: { t: 's', v: 'Bob' },
+		B3: { t: 's', v: 'LA' },
+		A4: { t: 's', v: 'alice ' }, // same as row 2 after case/whitespace normalization
+		B4: { t: 's', v: 'NYC' }
+	};
+	const dupWorkbook = { SheetNames: ['Sheet1'], Sheets: { Sheet1: dupWs } };
+	const dupBuf: Buffer = XLSX.write(dupWorkbook, { type: 'buffer', bookType: 'xlsx' });
+	xlsxDuplicatesFixtureBytes = toArrayBuffer(dupBuf);
 });
+
+function baseDuplicationRequest(
+	overrides: Partial<DuplicationBuildRequest> = {}
+): DuplicationBuildRequest {
+	return {
+		fileName: 'test.xlsx',
+		sourceType: 'excel',
+		fileBytes: xlsxDuplicatesFixtureBytes,
+		sheetName: 'Sheet1',
+		title: 'Test Duplication Report',
+		keyColumns: ['Name'],
+		caseInsensitive: true,
+		trimWhitespace: true,
+		detail: 'compact',
+		pageSize: 'Letter',
+		generatedAtDisplay: '2024-01-01 12:00 UTC',
+		...overrides
+	};
+}
 
 function baseRequest(overrides: Partial<ReportBuildRequest> = {}): ReportBuildRequest {
 	return {
@@ -145,5 +183,51 @@ describe('buildReport — end to end (Excel source)', () => {
 	it('reports the correct group count', async () => {
 		const result = await buildReport(baseRequest(), fontBytesOverride);
 		expect(result.groupCount).toBe(2); // East, West
+	});
+});
+
+describe('buildDuplicationReport — end to end (Excel source)', () => {
+	it('finds the normalized "Alice"/"alice " duplicate pair and excludes the unique "Bob" row', async () => {
+		const result = await buildDuplicationReport(baseDuplicationRequest(), fontBytesOverride);
+		expect(result.groupCount).toBe(1);
+		expect(result.duplicateRowCount).toBe(2);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('Duplicate groups');
+		expect(text).toContain('Alice');
+		expect(text).not.toContain('Bob');
+	});
+
+	it('finds no duplicates when case/whitespace normalization is turned off', async () => {
+		const result = await buildDuplicationReport(
+			baseDuplicationRequest({ caseInsensitive: false, trimWhitespace: false }),
+			fontBytesOverride
+		);
+		expect(result.groupCount).toBe(0);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('No duplicate groups were found');
+	});
+
+	it('includes the row numbers for the matched duplicate group in compact mode', async () => {
+		const result = await buildDuplicationReport(baseDuplicationRequest(), fontBytesOverride);
+		const text = await extractAllText(result.pdfBytes);
+		// Rows 1 and 3 (1-based, Alice at row 1, "alice " at row 3) should
+		// both be listed.
+		expect(text).toMatch(/1.*3|1,\s*3/);
+	});
+
+	it('full detail mode includes every column for every duplicated row, not just the key column', async () => {
+		const result = await buildDuplicationReport(
+			baseDuplicationRequest({ detail: 'full' }),
+			fontBytesOverride
+		);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('NYC'); // the City column value, only present in 'full' mode
+	});
+
+	it('includes the full SHA-256 of the original bytes', async () => {
+		const result = await buildDuplicationReport(baseDuplicationRequest(), fontBytesOverride);
+		expect(result.sha256Full).toHaveLength(64);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain(result.sha256Full);
 	});
 });
