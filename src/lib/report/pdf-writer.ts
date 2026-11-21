@@ -216,7 +216,16 @@ function drawTextLine(
 	page.drawText(text, { x, y, size, font, color });
 }
 
-/** Draw the repeating column-header row at `y`; returns the new y (below it). */
+/**
+ * Draw the repeating column-header row at `y`; returns the new y (below it).
+ *
+ * Headers are wrapped to their column's width (same `wrapText()` used for
+ * data-row cells) instead of drawn as one unbroken line — with many narrow
+ * columns (e.g. a 13-column Detail table) `shrinkColumnsToFit()` can squeeze
+ * a column narrower than its own header label, and an unwrapped header then
+ * overflows past the column boundary and visually runs into the next
+ * header's text (the "RegistrationNBusinessName" mangling reported).
+ */
 function drawColumnHeader(
 	page: PDFPage,
 	columns: string[],
@@ -225,12 +234,21 @@ function drawColumnHeader(
 	y: number,
 	boldFont: PDFFont
 ): number {
+	const perColumnLines = columns.map((header, i) =>
+		wrapText(header, boldFont, SECTION_SIZE, colWidths[i] - CELL_PADDING * 2)
+	);
+	const maxLines = Math.max(1, ...perColumnLines.map((lines) => lines.length));
+
 	let x = left;
 	for (let i = 0; i < columns.length; i++) {
-		drawTextLine(page, columns[i], x + CELL_PADDING, y - SECTION_SIZE, SECTION_SIZE, boldFont, rgb(0, 0, 0));
+		let ly = y - SECTION_SIZE;
+		for (const line of perColumnLines[i]) {
+			drawTextLine(page, line, x + CELL_PADDING, ly, SECTION_SIZE, boldFont, rgb(0, 0, 0));
+			ly -= SECTION_SIZE + LINE_GAP;
+		}
 		x += colWidths[i];
 	}
-	const headerBottom = y - SECTION_SIZE - 4;
+	const headerBottom = y - (SECTION_SIZE + LINE_GAP) * maxLines - 4 + LINE_GAP;
 	page.drawLine({
 		start: { x: left, y: headerBottom },
 		end: { x: left + colWidths.reduce((a, b) => a + b, 0), y: headerBottom },
@@ -448,4 +466,181 @@ export async function buildReportPdf(
 
 	const bytes = await doc.save();
 	return { bytes, replacedCharacterCount: replacedCount, landscape };
+}
+
+// ============================================================
+// "Column Visual Analysis" report — a compact image grid, 3 charts/page
+// ============================================================
+
+/** One column's ready-to-draw entry for the visual-analysis report. */
+export interface ColumnVisualInput {
+	column: string;
+	title: string;
+	/** PNG bytes from column-chart-renderer.ts, or null if nothing was plottable. */
+	chartPng: Uint8Array | null;
+	/** Native pixel dimensions of chartPng (ignored when chartPng is null). */
+	chartWidth: number;
+	chartHeight: number;
+	statSummary: string;
+}
+
+export interface ColumnVisualPdfInput {
+	title: string;
+	fileName: string;
+	generatedAtDisplay: string;
+	sha256Full: string;
+	pageSize: 'Letter' | 'A4';
+	columns: ColumnVisualInput[];
+}
+
+/** Charts packed per page — "most compact design possible" per requirement. */
+const CHARTS_PER_PAGE = 3;
+
+/**
+ * Render the "Column Visual Analysis" report: a title, then every
+ * configured column's chart image + one-line stat summary, packed 3-per-page
+ * in a single-column stack (the most compact layout that still keeps each
+ * chart legibly sized on a Letter/A4 page). Page 1 reserves room for the
+ * report title above its 3 bands; later pages use the full content height.
+ */
+export async function buildColumnVisualPdf(
+	rawInput: ColumnVisualPdfInput,
+	fontBytes: { regular: ArrayBuffer | Uint8Array; bold: ArrayBuffer | Uint8Array },
+	onProgress?: (drawn: number, total: number) => void
+): Promise<ReportPdfResult> {
+	const doc = await PDFDocument.create();
+	const { regular, bold, coverage } = await embedReportFonts(doc, fontBytes.regular, fontBytes.bold);
+	const { input, replacedCount } = sanitizeVisualInput(rawInput, coverage);
+
+	doc.setTitle(input.title);
+	doc.setAuthor('Cesvu');
+	doc.setCreator('Cesvu');
+	doc.setProducer('Cesvu Report Generator');
+	doc.setCreationDate(FIXED_METADATA_DATE);
+	doc.setModificationDate(FIXED_METADATA_DATE);
+
+	const [pageWidth, pageHeight] = PAGE_SIZES[input.pageSize];
+	const contentWidth = pageWidth - MARGIN * 2;
+
+	const pages: PageCursor[] = [];
+	const newPage = (): PageCursor => {
+		const p = doc.addPage([pageWidth, pageHeight]);
+		const cursor = new PageCursor(p, pageHeight);
+		pages.push(cursor);
+		return cursor;
+	};
+
+	let cursor = newPage();
+	drawTextLine(cursor.page, input.title, cursor.left, cursor.y - TITLE_SIZE, TITLE_SIZE, bold, rgb(0, 0, 0));
+	cursor.y -= TITLE_SIZE + 14;
+
+	const embeddedImages = await Promise.all(
+		input.columns.map((c) => (c.chartPng ? doc.embedPng(c.chartPng) : null))
+	);
+
+	const bandGap = 10;
+	const headerSize = 10;
+	const headerBlock = headerSize + 11 + 6; // title line + stat line + gap before chart
+
+	let drawnOnPage = 0;
+	let pageBandCount = Math.min(CHARTS_PER_PAGE, input.columns.length);
+	let pageUsableHeight = cursor.y - cursor.bottom;
+	let bandHeight = (pageUsableHeight - bandGap * (pageBandCount - 1)) / pageBandCount;
+
+	for (let i = 0; i < input.columns.length; i++) {
+		const col = input.columns[i];
+		const img = embeddedImages[i];
+
+		if (drawnOnPage === CHARTS_PER_PAGE) {
+			cursor = newPage();
+			drawnOnPage = 0;
+			pageBandCount = Math.min(CHARTS_PER_PAGE, input.columns.length - i);
+			pageUsableHeight = cursor.y - cursor.bottom;
+			bandHeight = (pageUsableHeight - bandGap * (pageBandCount - 1)) / pageBandCount;
+		}
+
+		drawTextLine(cursor.page, col.title, cursor.left, cursor.y - headerSize, headerSize, bold, rgb(0, 0, 0));
+		const statY = cursor.y - headerSize - 11;
+		drawTextLine(cursor.page, col.statSummary, cursor.left, statY, FOOTER_SIZE + 1, regular, rgb(0.35, 0.35, 0.35));
+
+		const chartTop = statY - 6;
+		const chartMaxHeight = bandHeight - headerBlock;
+		if (img) {
+			const scale = Math.min(contentWidth / col.chartWidth, chartMaxHeight / col.chartHeight);
+			const w = col.chartWidth * scale;
+			const h = col.chartHeight * scale;
+			cursor.page.drawImage(img, {
+				x: cursor.left + (contentWidth - w) / 2,
+				y: chartTop - h,
+				width: w,
+				height: h
+			});
+		} else {
+			drawTextLine(
+				cursor.page,
+				'No chart available for this column.',
+				cursor.left,
+				chartTop - chartMaxHeight / 2,
+				BODY_SIZE,
+				regular,
+				rgb(0.5, 0.5, 0.5)
+			);
+		}
+
+		cursor.y -= bandHeight + bandGap;
+		drawnOnPage++;
+		onProgress?.(i + 1, input.columns.length);
+	}
+
+	const shortHash = input.sha256Full.slice(0, 12);
+	const total = pages.length;
+	pages.forEach((p, idx) => {
+		const footerY = MARGIN;
+		drawTextLine(
+			p.page,
+			`${input.fileName} · SHA-256 ${shortHash} · Generated ${input.generatedAtDisplay}`,
+			MARGIN,
+			footerY + 12,
+			FOOTER_SIZE,
+			regular,
+			rgb(0.4, 0.4, 0.4)
+		);
+		const pageLabel = `Page ${idx + 1} of ${total}`;
+		const labelWidth = regular.widthOfTextAtSize(pageLabel, FOOTER_SIZE);
+		drawTextLine(
+			p.page,
+			pageLabel,
+			p.page.getWidth() - MARGIN - labelWidth,
+			footerY + 12,
+			FOOTER_SIZE,
+			regular,
+			rgb(0.4, 0.4, 0.4)
+		);
+	});
+
+	const bytes = await doc.save();
+	return { bytes, replacedCharacterCount: replacedCount, landscape: false };
+}
+
+/** Sanitize every string this input carries (title/stat summaries/etc.). */
+function sanitizeVisualInput(
+	input: ColumnVisualPdfInput,
+	coverage: Set<number>
+): { input: ColumnVisualPdfInput; replacedCount: number } {
+	let replacedCount = 0;
+	const s = (text: string): string => {
+		const r = sanitizeForFont(text, coverage);
+		replacedCount += r.replacedCount;
+		return r.text;
+	};
+	return {
+		input: {
+			...input,
+			title: s(input.title),
+			fileName: s(input.fileName),
+			generatedAtDisplay: s(input.generatedAtDisplay),
+			columns: input.columns.map((c) => ({ ...c, title: s(c.title), statSummary: s(c.statSummary) }))
+		},
+		replacedCount
+	};
 }

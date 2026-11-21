@@ -18,20 +18,35 @@
 	import { workspace } from '$lib/stores/workspace.svelte.js';
 	import {
 		generateReport,
+		generateColumnVisualReport,
 		type GenerateReportResult,
 		type GenerateReportHandle,
-		type ReportProgress
+		type GenerateColumnVisualResult,
+		type GenerateColumnVisualHandle,
+		type ReportProgress,
+		type ColumnVisualInput
 	} from '$lib/report/generate-report.js';
 	import { defaultColumnAggregations, type AggregationChoice, type SortOption } from '$lib/report/summary-report.js';
 	import type { ReportBuildRequest } from '$lib/report/report-worker.js';
+	import {
+		defaultChartType,
+		availableChartTypes,
+		CHART_DEFAULT_COLOR,
+		type ReportChartType,
+		type ReportCategorySort,
+		type ColumnChartConfig
+	} from '$lib/report/report-chart-specs.js';
+	import { renderColumnCharts } from '$lib/report/column-chart-renderer.js';
+	import { formatStatSummary } from '$lib/report/column-visual-report.js';
+	import { computeColumnStats } from '$lib/pipeline/columnStats.js';
 
 	interface Props {
 		onclose: () => void;
 	}
 	let { onclose }: Props = $props();
 
-	type ReportType = 'summary' | 'batch' | 'data-review';
-	type Phase = 'type' | 'options' | 'generating' | 'done' | 'error';
+	type ReportType = 'summary' | 'column-visual' | 'batch' | 'data-review';
+	type Phase = 'type' | 'options' | 'column-visual-options' | 'generating' | 'done' | 'error';
 
 	let phase = $state<Phase>('type');
 	let reportType = $state<ReportType>('summary');
@@ -55,6 +70,52 @@
 	const numericHeaders = $derived(
 		(activeSheetProfile?.columns ?? []).filter((c) => c.type === 'numeric').map((c) => c.name)
 	);
+
+	// ── Column Visual Analysis state ─────────────────────────────────────
+	// Any column can be added fresh (not tied to the dashboard's "loaded"
+	// set) and gets a fully independent chart config — more configuration
+	// than the dashboard's fixed one-chart-type-per-column-type behavior.
+	interface VisualColumnEntry {
+		column: string;
+		columnType: 'numeric' | 'categorical' | 'datetime' | 'text';
+		chartType: ReportChartType;
+		title: string;
+		color: string;
+		topN: number;
+		sort: ReportCategorySort;
+		binCount: number;
+	}
+	let visualColumns = $state<VisualColumnEntry[]>([]);
+	let visualColumnToAdd = $state<string>('');
+
+	const availableColumnsToAdd = $derived(
+		(activeSheetProfile?.columns ?? []).filter(
+			(c) => !visualColumns.some((v) => v.column === c.name)
+		)
+	);
+
+	function addVisualColumn(name: string) {
+		const profile = activeSheetProfile?.columns.find((c) => c.name === name);
+		if (!profile) return;
+		visualColumns = [
+			...visualColumns,
+			{
+				column: name,
+				columnType: profile.type,
+				chartType: defaultChartType(profile.type),
+				title: name,
+				color: CHART_DEFAULT_COLOR,
+				topN: 10,
+				sort: 'count-desc',
+				binCount: 20
+			}
+		];
+		visualColumnToAdd = '';
+	}
+
+	function removeVisualColumn(name: string) {
+		visualColumns = visualColumns.filter((v) => v.column !== name);
+	}
 
 	// ── Options state ────────────────────────────────────────────────────
 	let groupByColumn = $state<string | null>(null);
@@ -114,7 +175,7 @@
 		return `${sortColumn ?? '—'} subtotal (${sortDirection})`;
 	}
 
-	let result: GenerateReportResult | null = null;
+	let result = $state<GenerateReportResult | null>(null);
 
 	// ── Progress UI state (shown during the 'generating' phase) ────────────
 	const STAGE_LABELS: Record<ReportProgress['stage'], string> = {
@@ -134,7 +195,8 @@
 	);
 	const progressPercent = $derived(progressTotal > 0 ? Math.round((progressProcessed / progressTotal) * 100) : null);
 
-	let activeHandle: GenerateReportHandle | null = null;
+	let activeHandle: GenerateReportHandle | GenerateColumnVisualHandle | null = null;
+	let visualResult = $state<GenerateColumnVisualResult | null>(null);
 
 	async function generate() {
 		if (!workbook || !selectedSheetName) return;
@@ -163,12 +225,13 @@
 				pageSize,
 				generatedAtDisplay: new Date().toLocaleString()
 			};
-			activeHandle = generateReport(request, (progress) => {
+			const handle = generateReport(request, (progress) => {
 				progressStage = progress.stage;
 				progressProcessed = progress.processed;
 				progressTotal = progress.total;
 			});
-			result = await activeHandle.promise;
+			activeHandle = handle;
+			result = await handle.promise;
 			activeHandle = null;
 			downloadPdf();
 			phase = 'done';
@@ -184,19 +247,101 @@
 		}
 	}
 
+	/** Rendering stage shown before the worker even starts (main-thread chart
+	 *  rasterization) — distinct from the worker's own progress stages. */
+	let renderingCharts = $state(false);
+	let renderedCount = $state(0);
+	let renderTotal = $state(0);
+
+	async function generateColumnVisual() {
+		const file = workspace.file;
+		if (!file || visualColumns.length === 0) return;
+		const sheet = workbook?.sheets.find((s) => s.name === selectedSheetName);
+		if (!sheet) return;
+
+		phase = 'generating';
+		renderingCharts = true;
+		renderedCount = 0;
+		renderTotal = visualColumns.length;
+		try {
+			const configs: ColumnChartConfig[] = visualColumns.map((v) => ({
+				column: v.column,
+				columnType: v.columnType,
+				chartType: v.chartType,
+				title: v.title,
+				color: v.color,
+				topN: v.topN,
+				sort: v.sort,
+				binCount: v.binCount
+			}));
+			const rendered = await renderColumnCharts(sheet.rows, configs, (n, total) => {
+				renderedCount = n;
+				renderTotal = total;
+			});
+			renderingCharts = false;
+
+			const columns: ColumnVisualInput[] = rendered.map((r) => {
+				const entry = visualColumns.find((v) => v.column === r.column)!;
+				const stats = computeColumnStats(entry.column, sheet.rows, entry.columnType, 'full');
+				return {
+					column: r.column,
+					title: entry.title,
+					chartPng: r.pngBytes,
+					chartWidth: r.width,
+					chartHeight: r.height,
+					statSummary: formatStatSummary(stats)
+				};
+			});
+
+			progressStage = 'reading';
+			progressProcessed = 0;
+			progressTotal = 0;
+			const handle = generateColumnVisualReport(
+				{
+					fileName: file.name,
+					title: `${file.name} — Column Visual Analysis`,
+					pageSize,
+					generatedAtDisplay: new Date().toLocaleString(),
+					fileBytes: file.rawContent,
+					columns
+				},
+				(progress) => {
+					progressStage = progress.stage;
+					progressProcessed = progress.processed;
+					progressTotal = progress.total;
+				}
+			);
+			activeHandle = handle;
+			visualResult = await handle.promise;
+			activeHandle = null;
+			downloadPdf();
+			phase = 'done';
+		} catch (err) {
+			activeHandle = null;
+			renderingCharts = false;
+			if (phase === 'generating') {
+				error = err instanceof Error ? err.message : String(err);
+				phase = 'error';
+			}
+		}
+	}
+
 	function cancelGenerate() {
 		activeHandle?.cancel();
 		activeHandle = null;
-		phase = 'options';
+		renderingCharts = false;
+		phase = reportType === 'column-visual' ? 'column-visual-options' : 'options';
 	}
 
 	function downloadPdf() {
-		if (!result) return;
-		const blob = new Blob([result.pdfBytes as BlobPart], { type: 'application/pdf' });
+		const bytes = reportType === 'column-visual' ? visualResult?.pdfBytes : result?.pdfBytes;
+		if (!bytes) return;
+		const suffix = reportType === 'column-visual' ? 'column-visual-analysis' : 'summary-report';
+		const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
 		a.href = url;
-		a.download = `${(workspace.file?.name ?? 'report').replace(/\.[^.]+$/, '')}-summary-report.pdf`;
+		a.download = `${(workspace.file?.name ?? 'report').replace(/\.[^.]+$/, '')}-${suffix}.pdf`;
 		document.body.appendChild(a);
 		a.click();
 		a.remove();
@@ -212,6 +357,18 @@
 	{#if phase === 'type'}
 		<div class="space-y-3">
 			<p class="text-sm text-gray-600 dark:text-gray-400">Choose what kind of report to generate.</p>
+
+			<button
+				type="button"
+				onclick={() => { reportType = 'column-visual'; phase = 'column-visual-options'; }}
+				class="w-full text-left p-4 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+			>
+				<div class="font-semibold text-sm text-gray-900 dark:text-white">Column Visual Analysis</div>
+				<p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+					Pick any columns and customize each chart — bar, pie, histogram, or
+					timeline — then export a compact PDF (3 charts per page).
+				</p>
+			</button>
 
 			<button
 				type="button"
@@ -240,6 +397,107 @@
 				</div>
 				<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">Duplicates, outliers, and rule-based flags.</p>
 			</div>
+		</div>
+	{:else if phase === 'column-visual-options'}
+		<div class="space-y-4">
+			{#if isExcel && workbook && workbook.sheets.length > 1}
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Sheet</span>
+					<select bind:value={selectedSheetName} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+						{#each workbook.sheets as s (s.name)}
+							<option value={s.name}>{s.name}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Add a column</span>
+				<select
+					bind:value={visualColumnToAdd}
+					onchange={() => visualColumnToAdd && addVisualColumn(visualColumnToAdd)}
+					class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5"
+				>
+					<option value="">Choose a column…</option>
+					{#each availableColumnsToAdd as c (c.name)}
+						<option value={c.name}>{c.name} ({c.type})</option>
+					{/each}
+				</select>
+			</label>
+
+			{#if visualColumns.length === 0}
+				<p class="text-xs text-gray-500 dark:text-gray-400">
+					No columns added yet. Pick one above to configure its chart.
+				</p>
+			{/if}
+
+			{#each visualColumns as entry (entry.column)}
+				<div class="rounded-xl border border-gray-200 dark:border-slate-800 p-3 space-y-2">
+					<div class="flex items-center justify-between gap-2">
+						<span class="font-semibold text-sm text-gray-900 dark:text-white">{entry.column}</span>
+						<button
+							type="button"
+							onclick={() => removeVisualColumn(entry.column)}
+							class="text-xs text-red-500 hover:text-red-600 dark:text-red-400 dark:hover:text-red-300"
+						>
+							Remove
+						</button>
+					</div>
+
+					<label class="block">
+						<span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">Chart title</span>
+						<input
+							type="text"
+							bind:value={entry.title}
+							class="mt-0.5 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2 py-1"
+						/>
+					</label>
+
+					<div class="grid grid-cols-2 gap-2">
+						<label class="block">
+							<span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">Chart type</span>
+							<select bind:value={entry.chartType} class="mt-0.5 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2 py-1">
+								{#each availableChartTypes(entry.columnType) as t (t)}
+									<option value={t}>{t}</option>
+								{/each}
+							</select>
+						</label>
+						<label class="block">
+							<span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">Color</span>
+							<input type="color" bind:value={entry.color} class="mt-0.5 w-full h-7 rounded-lg border border-gray-300 dark:border-slate-700" />
+						</label>
+					</div>
+
+					{#if entry.columnType === 'numeric'}
+						<label class="block">
+							<span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">Bin count ({entry.binCount})</span>
+							<input type="range" min="5" max="50" bind:value={entry.binCount} class="mt-0.5 w-full" />
+						</label>
+					{:else if entry.columnType === 'categorical' || entry.columnType === 'text'}
+						<div class="grid grid-cols-2 gap-2">
+							<label class="block">
+								<span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">Top N ({entry.topN})</span>
+								<input type="range" min="3" max="25" bind:value={entry.topN} class="mt-0.5 w-full" />
+							</label>
+							<label class="block">
+								<span class="text-[11px] font-medium text-gray-600 dark:text-gray-400">Sort</span>
+								<select bind:value={entry.sort} class="mt-0.5 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs px-2 py-1">
+									<option value="count-desc">By count</option>
+									<option value="alpha-asc">Alphabetical</option>
+								</select>
+							</label>
+						</div>
+					{/if}
+				</div>
+			{/each}
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Page size</span>
+				<select bind:value={pageSize} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="Letter">Letter</option>
+					<option value="A4">A4</option>
+				</select>
+			</label>
 		</div>
 	{:else if phase === 'options'}
 		<div class="space-y-4">
@@ -337,14 +595,26 @@
 	{:else if phase === 'generating'}
 		<div class="flex flex-col items-center justify-center gap-4 py-10 text-center">
 			<div class="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 dark:border-slate-700 border-t-blue-500"></div>
-			<p class="text-sm text-gray-500 dark:text-gray-400">{progressLabel}</p>
-			{#if progressPercent !== null}
+			{#if renderingCharts}
+				<p class="text-sm text-gray-500 dark:text-gray-400">
+					Rendering chart {renderedCount} of {renderTotal}…
+				</p>
 				<div class="w-full max-w-xs h-1.5 rounded-full bg-gray-200 dark:bg-slate-800 overflow-hidden">
 					<div
 						class="h-full rounded-full bg-blue-500 transition-[width] duration-150"
-						style={`width: ${progressPercent}%`}
+						style={`width: ${renderTotal > 0 ? Math.round((renderedCount / renderTotal) * 100) : 0}%`}
 					></div>
 				</div>
+			{:else}
+				<p class="text-sm text-gray-500 dark:text-gray-400">{progressLabel}</p>
+				{#if progressPercent !== null}
+					<div class="w-full max-w-xs h-1.5 rounded-full bg-gray-200 dark:bg-slate-800 overflow-hidden">
+						<div
+							class="h-full rounded-full bg-blue-500 transition-[width] duration-150"
+							style={`width: ${progressPercent}%`}
+						></div>
+					</div>
+				{/if}
 			{/if}
 			<p class="text-xs text-gray-400 dark:text-gray-500">Large sheets can take several seconds to build.</p>
 			<button
@@ -357,7 +627,7 @@
 	{:else if phase === 'error'}
 		<div class="space-y-4 py-4">
 			<p class="text-sm text-red-600 dark:text-red-300">{error}</p>
-			<button onclick={generate} class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700">
+			<button onclick={reportType === 'column-visual' ? generateColumnVisual : generate} class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700">
 				Try again
 			</button>
 		</div>
@@ -365,13 +635,19 @@
 		<div class="flex flex-col items-center justify-center gap-3 py-8 text-center">
 			<div class="flex h-12 w-12 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/40 text-2xl">✓</div>
 			<p class="text-sm font-medium text-gray-900 dark:text-white">Your report is downloading.</p>
-			{#if result && result.replacedCharacterCount > 0}
+			{#if result && reportType !== 'column-visual' && result.replacedCharacterCount > 0}
 				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
 					{result.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were replaced
 					with "?" — likely a non-Latin script (e.g. Japanese, Arabic) this report doesn't yet support.
 				</p>
 			{/if}
-			{#if result}
+			{#if visualResult && reportType === 'column-visual' && visualResult.replacedCharacterCount > 0}
+				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
+					{visualResult.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were replaced
+					with "?" — likely a non-Latin script this report doesn't yet support.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual'}
 				{#each result.warnings as w (w)}
 					<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">⚠ {w}</p>
 				{/each}
@@ -380,7 +656,20 @@
 	{/if}
 
 	{#snippet footer()}
-		{#if phase === 'options'}
+		{#if phase === 'column-visual-options'}
+			<div class="flex justify-between gap-2">
+				<button onclick={() => (phase = 'type')} class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+					Back
+				</button>
+				<button
+					onclick={generateColumnVisual}
+					disabled={visualColumns.length === 0}
+					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					Generate
+				</button>
+			</div>
+		{:else if phase === 'options'}
 			<div class="flex justify-between gap-2">
 				<button onclick={() => (phase = 'type')} class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
 					Back

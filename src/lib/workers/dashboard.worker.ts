@@ -38,6 +38,11 @@ import { computeColumnStats, computeKpis, toNumber, toDate } from '$lib/pipeline
 import type { ColumnStats } from '$lib/pipeline/columnStats.js';
 import type { ColumnProfile } from '$lib/types.js';
 import type { ChartData } from '$lib/visuals/chart-specs.js';
+import {
+	categoryData as sharedCategoryData,
+	histogramData as sharedHistogramData,
+	timeseriesData as sharedTimeseriesData
+} from '$lib/visuals/chart-data.js';
 import type { Filter } from '$lib/pipeline/filter.js';
 import { evaluate as evalFilter } from '$lib/pipeline/filter.js';
 
@@ -77,64 +82,20 @@ export interface ComputeResult {
 
 // ── Chart-data helpers ────────────────────────────────────────────────────
 
+// Thin wrappers delegating to the shared, Worker-agnostic implementations in
+// chart-data.ts (also used by the main-thread "Column Visual Analysis"
+// report renderer). Kept as local functions — rather than inlining the
+// imports below — so this file's existing call sites/behavior are untouched.
 function categoryData(rows: Record<string, unknown>[], col: string, topN = 10): ChartData {
-	const counts = new Map<string, number>();
-	for (const r of rows) {
-		const v = r[col];
-		if (v === null || v === undefined || v === '') continue;
-		const s = String(v);
-		counts.set(s, (counts.get(s) ?? 0) + 1);
-	}
-	const top = [...counts.entries()]
-		.sort((a, b) => b[1] - a[1])
-		.slice(0, topN)
-		.map(([label, count]) => ({ label, count }));
-	return { kind: 'category', values: top };
+	return sharedCategoryData(rows, col, topN);
 }
 
 function histogramData(rows: Record<string, unknown>[], col: string, binCount = 20): ChartData {
-	const nums: number[] = [];
-	for (const r of rows) {
-		const n = toNumber(r[col]);
-		if (n !== null) nums.push(n);
-	}
-	if (nums.length < 2) return { kind: 'histogram', bins: [] };
-	// Linear min/max — see columnStats.ts for why.
-	let min = nums[0];
-	let max = nums[0];
-	for (let i = 1; i < nums.length; i++) {
-		if (nums[i] < min) min = nums[i];
-		if (nums[i] > max) max = nums[i];
-	}
-	if (min === max) {
-		return { kind: 'histogram', bins: [{ lo: min, hi: max, count: nums.length }] };
-	}
-	const width = (max - min) / binCount;
-	const bins = Array.from({ length: binCount }, (_, i) => ({
-		lo: min + i * width,
-		hi: min + (i + 1) * width,
-		count: 0
-	}));
-	for (const n of nums) {
-		let i = Math.floor((n - min) / width);
-		if (i >= binCount) i = binCount - 1;
-		bins[i].count++;
-	}
-	return { kind: 'histogram', bins };
+	return sharedHistogramData(rows, col, binCount, toNumber);
 }
 
 function timeseriesData(rows: Record<string, unknown>[], col: string): ChartData {
-	const monthCounts = new Map<string, number>();
-	for (const r of rows) {
-		const d = toDate(r[col]);
-		if (!d) continue;
-		const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
-		monthCounts.set(key, (monthCounts.get(key) ?? 0) + 1);
-	}
-	const buckets = [...monthCounts.entries()]
-		.sort(([a], [b]) => a.localeCompare(b))
-		.map(([month, count]) => ({ month, count }));
-	return { kind: 'timeseries', buckets };
+	return sharedTimeseriesData(rows, col, toDate);
 }
 
 function chartDataFor(col: ColumnProfile, rows: Record<string, unknown>[]): ChartData | null {

@@ -6,8 +6,10 @@
  */
 
 import { newId } from '$lib/utils/id.js';
-import type { ReportBuildRequest, ReportProgress } from './report-worker.js';
+import type { ReportBuildRequest, ReportProgress, ColumnVisualBuildRequest } from './report-worker.js';
 export type { ReportProgress } from './report-worker.js';
+export type { ColumnVisualBuildRequest } from './report-worker.js';
+export type { ColumnVisualInput } from './pdf-writer.js';
 
 export interface GenerateReportResult {
 	pdfBytes: Uint8Array;
@@ -93,6 +95,91 @@ export function generateReport(
 		// the rest of the app (export, re-share, etc.) after this call.
 		const copy = request.fileBytes.slice(0);
 		worker.postMessage({ type: 'build', id, request: { ...request, fileBytes: copy } }, [copy]);
+	});
+
+	return {
+		promise,
+		cancel: () => {
+			cancelled = true;
+			cleanup();
+		}
+	};
+}
+
+export interface GenerateColumnVisualResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	sha256Full: string;
+}
+
+export interface GenerateColumnVisualHandle {
+	promise: Promise<GenerateColumnVisualResult>;
+	cancel: () => void;
+}
+
+/**
+ * Run a "Column Visual Analysis" PDF build in a Web Worker. The chart PNGs
+ * in `request.columns` must already be rendered (column-chart-renderer.ts,
+ * main-thread only — vega-embed needs a DOM) before calling this; the
+ * worker here only lays out, draws, and saves the PDF, same `{ promise,
+ * cancel }` + progress-callback shape as {@link generateReport}.
+ */
+export function generateColumnVisualReport(
+	request: ColumnVisualBuildRequest,
+	onProgress?: (progress: ReportProgress) => void
+): GenerateColumnVisualHandle {
+	let worker: Worker;
+	try {
+		worker = new Worker(new URL('./report-worker.ts', import.meta.url), { type: 'module' });
+	} catch (err) {
+		return {
+			promise: Promise.reject(
+				err instanceof Error ? err : new Error('Failed to start the report worker')
+			),
+			cancel: () => {}
+		};
+	}
+
+	const id = newId('report');
+	let cancelled = false;
+	const cleanup = () => worker.terminate();
+
+	const promise = new Promise<GenerateColumnVisualResult>((resolve, reject) => {
+		worker.onmessage = (event: MessageEvent) => {
+			const msg = event.data;
+			if (!msg || msg.id !== id || cancelled) return;
+			switch (msg.type) {
+				case 'progress':
+					onProgress?.({ stage: msg.stage, processed: msg.processed, total: msg.total });
+					break;
+				case 'done':
+					cleanup();
+					resolve({
+						pdfBytes: msg.pdfBytes,
+						replacedCharacterCount: msg.replacedCharacterCount,
+						sha256Full: msg.sha256Full
+					});
+					break;
+				case 'error':
+					cleanup();
+					reject(new Error(msg.message ?? 'Report generation failed'));
+					break;
+			}
+		};
+		worker.onerror = (e) => {
+			if (cancelled) return;
+			cleanup();
+			reject(new Error(e.message ?? 'Report worker crashed'));
+		};
+
+		// Same copy-before-transfer rule as generateReport() — fileBytes here
+		// is only used for the footer's SHA-256 hash, but it's still the
+		// caller's buffer, so we never transfer the original.
+		const copy = request.fileBytes.slice(0);
+		worker.postMessage(
+			{ type: 'build-column-visual', id, request: { ...request, fileBytes: copy } },
+			[copy]
+		);
 	});
 
 	return {

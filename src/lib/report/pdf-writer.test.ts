@@ -35,6 +35,20 @@ async function extractPageTexts(bytes: Uint8Array): Promise<string[]> {
 	return texts;
 }
 
+/** Raw per-item text + position (x, y from the PDF transform matrix), page 1 only. */
+async function extractPage1Items(bytes: Uint8Array): Promise<{ str: string; x: number; y: number }[]> {
+	const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+	const doc = await pdfjs.getDocument({ data: bytes }).promise;
+	const page = await doc.getPage(1);
+	const content = await page.getTextContent();
+	return content.items
+		.filter((it) => 'str' in it)
+		.map((it) => {
+			const withTransform = it as unknown as { str: string; transform: number[] };
+			return { str: withTransform.str, x: withTransform.transform[4], y: withTransform.transform[5] };
+		});
+}
+
 function baseSection(overrides: Partial<ReportTableSection> = {}): ReportTableSection {
 	return {
 		heading: 'Detail',
@@ -220,6 +234,71 @@ describe('buildReportPdf — script coverage fixtures', () => {
 			fontBytes
 		);
 		expect(landscape).toBe(true);
+	});
+
+	it('wraps long column headers onto multiple lines instead of overflowing into the next column (regression)', async () => {
+		// Mirrors the reported bug: many columns with long header names and
+		// SHORT sample values (so shrinkColumnsToFit squeezes columns down
+		// based on the narrow data, leaving headers wider than their column).
+		const columns = [
+			'RegistrationNumber',
+			'BusinessName',
+			'ExpirationDate',
+			'AddressLine1',
+			'AddressLine2',
+			'AddressLine3',
+			'City',
+			'StateName',
+			'ZipCode',
+			'CountyName',
+			'PhoneNumber',
+			'EmailAddress',
+			'BusinessDescription'
+		];
+		const columnSamples = columns.map(() => ['x']);
+		const lines: ReportLine[] = [{ kind: 'data', cells: columns.map(() => 'x') }];
+		const { bytes } = await buildReportPdf(
+			baseInput({
+				settingsLines: [],
+				kpiLines: [],
+				sections: [baseSection({ columns, columnSamples, lines, heading: 'Detail' })]
+			}),
+			fontBytes
+		);
+
+		const items = await extractPage1Items(bytes);
+		// The reported bug glued two adjacent headers into one unspaced run
+		// (e.g. "RegistrationNBusinessName") because the whole header was
+		// drawn as a single line regardless of column width. Confirm that
+		// never happens — no text item should span across what used to be a
+		// column boundary into the next header's name.
+		expect(items.some((it) => it.str.includes('RegistrationNBusinessName'))).toBe(false);
+		expect(items.some((it) => it.str.includes('ExpirationDAddressLine'))).toBe(false);
+
+		// Reconstruct the column-header row by position: it's the only
+		// cluster of items between the "Detail" section heading (highest y,
+		// drawn at the page's left margin) and the first data row below it —
+		// excluding the title, the heading itself, the data row, and the
+		// footer (which sits near the bottom of the page).
+		const title = items.find((it) => it.str === 'Test Report')!;
+		const dataRow = items.find((it) => it.str === 'x')!;
+		const dataRowX = dataRow.x;
+		const headerRowItems = items.filter(
+			(it) =>
+				it.str.trim() !== '' && it.y < title.y && it.y > dataRow.y + 1 && it.str !== 'Detail'
+		);
+		// Column 1's header lines sit at the SAME x as its data row (both
+		// start at left + CELL_PADDING).
+		const firstColumnLines = headerRowItems.filter((it) => Math.abs(it.x - dataRowX) < 1);
+		const distinctYs = new Set(firstColumnLines.map((it) => Math.round(it.y)));
+		expect(distinctYs.size).toBeGreaterThan(1); // header wrapped onto 2+ lines
+		// And the reconstructed text for that column is the full, un-mangled
+		// header label, just wrapped — not glued to a neighboring column.
+		const firstColumnText = firstColumnLines
+			.sort((a, b) => b.y - a.y)
+			.map((it) => it.str)
+			.join('');
+		expect(firstColumnText).toBe('RegistrationNumber');
 	});
 });
 

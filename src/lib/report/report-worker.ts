@@ -20,7 +20,13 @@
 import { buildSummaryReport, type SortOption, type ReportDetail, type ColumnAggSpec, type ParsedRow } from './summary-report.js';
 import { adaptExcelCell, adaptCsvCell, columnLooksLikeDate, type Xlsxish } from './report-cells.js';
 import { buildSettingsLines, buildKpiLines, buildGroupSummarySection, buildDetailSection, type FormatTotalFn } from './report-pdf-input.js';
-import { buildReportPdf, type ReportPdfInput, type ReportTableSection } from './pdf-writer.js';
+import {
+	buildReportPdf,
+	buildColumnVisualPdf,
+	type ReportPdfInput,
+	type ReportTableSection,
+	type ColumnVisualInput
+} from './pdf-writer.js';
 
 // Fonts are bundled static assets — resolved to their final hashed URL at
 // build time via Vite's `?url` import, then fetched (works identically in
@@ -54,6 +60,29 @@ export interface ReportBuildResult {
 	landscape: boolean;
 	groupCount: number;
 	warnings: string[];
+	sha256Full: string;
+}
+
+/**
+ * Request for the "Column Visual Analysis" report. Unlike
+ * {@link ReportBuildRequest}, the chart images are ALREADY rendered
+ * (column-chart-renderer.ts does that on the main thread, where vega-embed
+ * can mount a real DOM) — this worker only lays out + draws + saves the PDF,
+ * same division of labor as the Summary Report's worker-side PDF assembly.
+ */
+export interface ColumnVisualBuildRequest {
+	fileName: string;
+	title: string;
+	pageSize: 'Letter' | 'A4';
+	generatedAtDisplay: string;
+	/** Original, uncapped file bytes — used only for the SHA-256 footer hash. */
+	fileBytes: ArrayBuffer;
+	columns: ColumnVisualInput[];
+}
+
+export interface ColumnVisualBuildResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
 	sha256Full: string;
 }
 
@@ -335,15 +364,83 @@ export async function buildReport(
 	};
 }
 
+/**
+ * Build pipeline for the "Column Visual Analysis" report. Pre-rendered chart
+ * PNGs + stat summaries are already in `request.columns` (produced on the
+ * main thread by column-chart-renderer.ts) — this function's only job is
+ * the SHA-256 hash + handing everything to pdf-writer.ts's image-grid layout,
+ * same 'drawing'/'saving' progress stages as the Summary Report.
+ */
+export async function buildColumnVisualReport(
+	request: ColumnVisualBuildRequest,
+	fontBytesOverride?: { regular: ArrayBuffer; bold: ArrayBuffer },
+	onProgress?: (progress: ReportProgress) => void
+): Promise<ColumnVisualBuildResult> {
+	onProgress?.({ stage: 'reading', processed: 0, total: 0 });
+	const sha256Full = await sha256Hex(request.fileBytes);
+	onProgress?.({ stage: 'reading', processed: 1, total: 1 });
+
+	const { regular: regularBytes, bold: boldBytes } =
+		fontBytesOverride ??
+		(await (async () => {
+			const [regular, bold] = await Promise.all([
+				fetchFontBytes(notoRegularUrl),
+				fetchFontBytes(notoBoldUrl)
+			]);
+			return { regular, bold };
+		})());
+
+	const { bytes, replacedCharacterCount } = await buildColumnVisualPdf(
+		{
+			title: request.title,
+			fileName: request.fileName,
+			generatedAtDisplay: request.generatedAtDisplay,
+			sha256Full,
+			pageSize: request.pageSize,
+			columns: request.columns
+		},
+		{ regular: regularBytes, bold: boldBytes },
+		(drawn, total) => {
+			if (drawn >= total) onProgress?.({ stage: 'saving', processed: 0, total: 0 });
+			else onProgress?.({ stage: 'drawing', processed: drawn, total });
+		}
+	);
+
+	return { pdfBytes: bytes, replacedCharacterCount, sha256Full };
+}
+
 // ============================================================
 // Worker protocol — only wired up when actually running as a Worker.
 // Guarded so this module can also be imported directly in tests/Node.
 // ============================================================
 if (typeof self !== 'undefined' && typeof (self as unknown as { postMessage?: unknown }).postMessage === 'function') {
 	self.onmessage = (event: MessageEvent) => {
-		const msg = event.data as { type: string; id: string; request?: ReportBuildRequest };
+		const msg = event.data as {
+			type: string;
+			id: string;
+			request?: ReportBuildRequest | ColumnVisualBuildRequest;
+		};
+		if (msg?.type === 'build-column-visual' && msg.request) {
+			buildColumnVisualReport(msg.request as ColumnVisualBuildRequest, undefined, (progress) => {
+				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
+			})
+				.then((result) => {
+					(self as unknown as Worker).postMessage(
+						{ type: 'done', id: msg.id, ...result },
+						[result.pdfBytes.buffer]
+					);
+				})
+				.catch((err) => {
+					(self as unknown as Worker).postMessage({
+						type: 'error',
+						id: msg.id,
+						message: err instanceof Error ? err.message : String(err)
+					});
+				});
+			return;
+		}
 		if (msg?.type !== 'build' || !msg.request) return;
-		buildReport(msg.request, undefined, (progress) => {
+		buildReport(msg.request as ReportBuildRequest, undefined, (progress) => {
 			(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
 		})
 			.then((result) => {
