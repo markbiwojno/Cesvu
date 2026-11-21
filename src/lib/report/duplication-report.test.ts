@@ -134,4 +134,23 @@ describe('buildDuplicationSection', () => {
 		const section = buildDuplicationSection(blankGroups, ['Name'], ['Name'], 'compact');
 		expect(section.lines[0]).toEqual({ kind: 'data', cells: ['(blank)', '2', '1, 2'] });
 	});
+
+	it('compact mode lists every row number verbatim at exactly the 50-entry cap', () => {
+		const rows = Array.from({ length: 50 }, () => row({ Name: 'Dup' }));
+		const bigGroups = findDuplicateGroups(rows, ['Name'], DEFAULT_OPTS);
+		const section = buildDuplicationSection(bigGroups, ['Name'], ['Name'], 'compact');
+		const expected = Array.from({ length: 50 }, (_, i) => i + 1).join(', ');
+		expect(section.lines[0]).toEqual({ kind: 'data', cells: ['Dup', '50', expected] });
+	});
+
+	it('compact mode truncates the row-numbers list past 50 entries with an "and N more" suffix', () => {
+		const rows = Array.from({ length: 2279 }, () => row({ Name: 'Dup' }));
+		const bigGroups = findDuplicateGroups(rows, ['Name'], DEFAULT_OPTS);
+		const section = buildDuplicationSection(bigGroups, ['Name'], ['Name'], 'compact');
+		const first50 = Array.from({ length: 50 }, (_, i) => i + 1).join(', ');
+		expect(section.lines[0]).toEqual({
+			kind: 'data',
+			cells: ['Dup', '2279', `${first50}, … and 2229 more`]
+		});
+	});
 });

@@ -83,6 +83,27 @@ export function findDuplicateGroups(
 	return groups;
 }
 
+/**
+ * Cap on how many row numbers are listed verbatim in a compact-mode "Row
+ * numbers" cell before switching to a "… and N more" suffix. Without this,
+ * a single large duplicate cluster (e.g. thousands of blank/NULL key rows)
+ * produces one table row whose wrapped text is taller than a full page —
+ * pdf-writer.ts draws each ReportLine as an atomic, unsplittable unit, so an
+ * oversized row would overflow past the page margins instead of paginating.
+ * The exact count is never lost: it's always shown in the adjacent
+ * "Row count" column.
+ */
+const MAX_ROW_NUMBERS_SHOWN = 50;
+
+/** Render a group's row-number list for the compact table, truncating past
+ *  {@link MAX_ROW_NUMBERS_SHOWN} entries with an "… and N more" suffix. */
+function formatRowNumbers(rowNumbers: number[]): string {
+	if (rowNumbers.length <= MAX_ROW_NUMBERS_SHOWN) return rowNumbers.join(', ');
+	const shown = rowNumbers.slice(0, MAX_ROW_NUMBERS_SHOWN);
+	const remaining = rowNumbers.length - MAX_ROW_NUMBERS_SHOWN;
+	return `${shown.join(', ')}, … and ${remaining} more`;
+}
+
 export type DuplicationDetail = 'compact' | 'full';
 
 /**
@@ -111,7 +132,7 @@ export function buildDuplicationSection(
 			cells: [
 				...keyColumns.map((c) => g.keyValues[c] || '(blank)'),
 				String(g.rowCount),
-				g.rowNumbers.join(', ')
+				formatRowNumbers(g.rowNumbers)
 			]
 		}));
 		const columnSamples = columns.map((_, i) =>
