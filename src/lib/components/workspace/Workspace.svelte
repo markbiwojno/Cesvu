@@ -11,6 +11,7 @@
 	import { DEFAULT_MODELS } from '$lib/stores/workspace.svelte.js';
 	import { notesStore } from '$lib/stores/notesStore.svelte.js';
 	import ExportModal from '$lib/components/ExportModal.svelte';
+	import GenerateReportModal from '$lib/components/report/GenerateReportModal.svelte';
 	import type { ParsedFile } from '$lib/types.js';
 	import { dropContainsDirectory } from '$lib/utils/drag-drop.js';
 	import { isCesvuZip } from '$lib/utils/is-cesvu-zip.js';
@@ -449,6 +450,11 @@
 	let showExport = $state(false);
 	let preparingExport = $state(false);
 
+	// ============================================================
+	// Generate Report (Excel/CSV only — see isTabularFile above)
+	// ============================================================
+	let showGenerateReport = $state(false);
+
 	/** A file is open → the Share button is visible at all. */
 	const canExport = $derived(workspace.hasFile);
 	/** Green/enabled only once the user has added at least one note — an
@@ -606,6 +612,20 @@
 
 		<!-- Light/dark mode toggle. Persists to localStorage via mode-watcher. -->
 		<ThemeToggle />
+
+		<!-- Generate Report (Excel/CSV only). Opens a popup to build a
+		     downloadable PDF from the sheet's data — grouped summary tables,
+		     subtotals, and a grand total for now; batch/data-review report
+		     types are scaffolded in the same modal for later. -->
+		{#if isTabularFile}
+			<button
+				type="button"
+				onclick={() => (showGenerateReport = true)}
+				class="px-3 py-1.5 rounded-lg bg-green-600 hover:bg-green-500 text-xs font-semibold text-white transition-colors"
+			>
+				Generate Report
+			</button>
+		{/if}
 
 		<!-- Model selector button (when file loaded).
 		     Hidden in contract mode — contracts use the LLM-free Notes flow, so
@@ -851,7 +871,11 @@
 		openedFromCesvu={workspace.openedFromCesvu}
 		onclose={() => (showExport = false)}
 	/>
+{/if}
 
+<!-- Generate Report modal -->
+{#if showGenerateReport}
+	<GenerateReportModal onclose={() => (showGenerateReport = false)} />
 {/if}
 
 
