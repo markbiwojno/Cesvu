@@ -22,6 +22,12 @@ import { adaptExcelCell, adaptCsvCell, columnLooksLikeDate, type Xlsxish } from 
 import { buildSettingsLines, buildKpiLines, buildGroupSummarySection, buildDetailSection, type FormatTotalFn } from './report-pdf-input.js';
 import { findDuplicateGroups, buildDuplicationSection, type DuplicationDetail } from './duplication-report.js';
 import {
+	findOutliers,
+	buildOutlierSections,
+	type OutlierSensitivity,
+	type OutlierReportDetail
+} from './outlier-report.js';
+import {
 	buildReportPdf,
 	buildColumnVisualPdf,
 	type ReportPdfInput,
@@ -141,6 +147,37 @@ export interface DuplicationBuildResult {
 	replacedCharacterCount: number;
 	groupCount: number;
 	duplicateRowCount: number;
+	sha256Full: string;
+}
+
+/**
+ * Request for the "Data Outlier Analysis" report. Same re-parse-the-ORIGINAL-
+ * file division of labor as the Duplication Report — outlier detection must
+ * see every row, not a capped display buffer.
+ */
+export interface OutlierBuildRequest {
+	fileName: string;
+	/** 'excel' re-parses with SheetJS; 'csv' re-parses with PapaParse. */
+	sourceType: 'excel' | 'csv';
+	/** Original, uncapped file bytes — see the module doc comment. */
+	fileBytes: ArrayBuffer;
+	/** Which worksheet tab to report on (ignored for CSV, which has one). */
+	sheetName?: string;
+	title: string;
+	/** Numeric columns to analyze (checked via checkboxes in the modal —
+	 *  at least one required). */
+	columns: string[];
+	sensitivity: OutlierSensitivity;
+	detail: OutlierReportDetail;
+	pageSize: 'Letter' | 'A4';
+	generatedAtDisplay: string;
+}
+
+export interface OutlierBuildResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	columnsAnalyzed: number;
+	totalOutlierCount: number;
 	sha256Full: string;
 }
 
@@ -599,6 +636,90 @@ export async function buildDuplicationReport(
 	return { pdfBytes: bytes, replacedCharacterCount, groupCount: groups.length, duplicateRowCount, sha256Full };
 }
 
+/**
+ * Build pipeline for the "Data Outlier Analysis" report. Re-parses the
+ * ORIGINAL file (same reparseSource()/buildRows() pipeline as the Summary
+ * and Duplication reports — outlier detection must see every row), runs
+ * findOutliers() over the checked numeric columns, and draws the resulting
+ * sections with the same table renderer the other reports use.
+ */
+export async function buildOutlierReport(
+	request: OutlierBuildRequest,
+	fontBytesOverride?: { regular: ArrayBuffer; bold: ArrayBuffer },
+	onProgress?: (progress: ReportProgress) => void
+): Promise<OutlierBuildResult> {
+	onProgress?.({ stage: 'reading', processed: 0, total: 0 });
+	const [sheet, sha256Full] = await Promise.all([
+		reparseSource(request),
+		sha256Hex(request.fileBytes)
+	]);
+	onProgress?.({ stage: 'reading', processed: 1, total: 1 });
+
+	const rows = await buildRows(sheet, (processed, total) =>
+		onProgress?.({ stage: 'preparing', processed, total })
+	);
+
+	onProgress?.({ stage: 'grouping', processed: 0, total: 0 });
+	const analysis = findOutliers(rows, request.columns, request.sensitivity);
+	const sections = buildOutlierSections(analysis, request.detail);
+
+	const { regular: regularBytes, bold: boldBytes } =
+		fontBytesOverride ??
+		(await (async () => {
+			const [regular, bold] = await Promise.all([
+				fetchFontBytes(notoRegularUrl),
+				fetchFontBytes(notoBoldUrl)
+			]);
+			return { regular, bold };
+		})());
+
+	const pdfInput: ReportPdfInput = {
+		title: request.title,
+		fileName: request.fileName,
+		generatedAtDisplay: request.generatedAtDisplay,
+		sha256Full,
+		settingsLines: [
+			`Columns analyzed: ${request.columns.join(', ')}`,
+			`Sensitivity: ${request.sensitivity === 'extreme' ? 'Extreme (3x IQR)' : 'Standard (1.5x IQR)'}`,
+			`Detail: ${request.detail === 'summary-and-detail' ? 'Summary + detail rows' : 'Summary only'}`,
+			`SHA-256: ${sha256Full}`
+		],
+		kpiLines: [
+			`Columns with outliers: ${analysis.columnSummaries.filter((s) => s.outlierCount > 0).length.toLocaleString()}`,
+			`Total outliers: ${analysis.totalOutlierCount.toLocaleString()}`
+		],
+		warnings: [
+			...(analysis.totalOutlierCount === 0
+				? ['No outliers were found for the selected column(s).']
+				: []),
+			...(analysis.details.length < analysis.totalOutlierCount
+				? [
+						`Showing ${analysis.details.length.toLocaleString()} of ${analysis.totalOutlierCount.toLocaleString()} outliers in the detail table — refine the column selection or sensitivity to see fewer, more targeted results.`
+					]
+				: [])
+		],
+		pageSize: request.pageSize,
+		sections
+	};
+
+	const { bytes, replacedCharacterCount } = await buildReportPdf(
+		pdfInput,
+		{ regular: regularBytes, bold: boldBytes },
+		(drawn, total) => {
+			if (drawn >= total) onProgress?.({ stage: 'saving', processed: 0, total: 0 });
+			else onProgress?.({ stage: 'drawing', processed: drawn, total });
+		}
+	);
+
+	return {
+		pdfBytes: bytes,
+		replacedCharacterCount,
+		columnsAnalyzed: analysis.columnSummaries.length,
+		totalOutlierCount: analysis.totalOutlierCount,
+		sha256Full
+	};
+}
+
 // ============================================================
 // Worker protocol — only wired up when actually running as a Worker.
 // Guarded so this module can also be imported directly in tests/Node.
@@ -612,7 +733,8 @@ if (typeof self !== 'undefined' && typeof (self as unknown as { postMessage?: un
 				| ReportBuildRequest
 				| ColumnVisualBuildRequest
 				| CellCommentaryBuildRequest
-				| DuplicationBuildRequest;
+				| DuplicationBuildRequest
+				| OutlierBuildRequest;
 		};
 		if (msg?.type === 'build-column-visual' && msg.request) {
 			buildColumnVisualReport(msg.request as ColumnVisualBuildRequest, undefined, (progress) => {
@@ -654,6 +776,25 @@ if (typeof self !== 'undefined' && typeof (self as unknown as { postMessage?: un
 		}
 		if (msg?.type === 'build-duplication' && msg.request) {
 			buildDuplicationReport(msg.request as DuplicationBuildRequest, undefined, (progress) => {
+				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
+			})
+				.then((result) => {
+					(self as unknown as Worker).postMessage(
+						{ type: 'done', id: msg.id, ...result },
+						[result.pdfBytes.buffer]
+					);
+				})
+				.catch((err) => {
+					(self as unknown as Worker).postMessage({
+						type: 'error',
+						id: msg.id,
+						message: err instanceof Error ? err.message : String(err)
+					});
+				});
+			return;
+		}
+		if (msg?.type === 'build-outlier' && msg.request) {
+			buildOutlierReport(msg.request as OutlierBuildRequest, undefined, (progress) => {
 				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
 			})
 				.then((result) => {

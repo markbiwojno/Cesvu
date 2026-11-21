@@ -2,7 +2,14 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildReport, buildDuplicationReport, type ReportBuildRequest, type DuplicationBuildRequest } from './report-worker.js';
+import {
+	buildReport,
+	buildDuplicationReport,
+	buildOutlierReport,
+	type ReportBuildRequest,
+	type DuplicationBuildRequest,
+	type OutlierBuildRequest
+} from './report-worker.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fontBytesOverride: { regular: ArrayBuffer; bold: ArrayBuffer };
@@ -17,6 +24,7 @@ let fontBytesOverride: { regular: ArrayBuffer; bold: ArrayBuffer };
 
 let xlsxFixtureBytes: ArrayBuffer;
 let xlsxDuplicatesFixtureBytes: ArrayBuffer;
+let xlsxOutlierFixtureBytes: ArrayBuffer;
 
 beforeAll(async () => {
 	const XLSX = (await import('xlsx')).default;
@@ -67,6 +75,19 @@ beforeAll(async () => {
 	const dupWorkbook = { SheetNames: ['Sheet1'], Sheets: { Sheet1: dupWs } };
 	const dupBuf: Buffer = XLSX.write(dupWorkbook, { type: 'buffer', bookType: 'xlsx' });
 	xlsxDuplicatesFixtureBytes = toArrayBuffer(dupBuf);
+
+	// A third fixture with a tight cluster of "normal" Amount values (rows
+	// 1-9) plus one clear high outlier (row 10, value 500), for the Data
+	// Outlier Analysis tests.
+	const outlierValues = [10, 11, 12, 13, 14, 12, 11, 13, 10, 500];
+	const outlierWs: Record<string, unknown> = { '!ref': `A1:A${outlierValues.length + 1}` };
+	outlierWs.A1 = { t: 's', v: 'Amount' };
+	outlierValues.forEach((v, i) => {
+		outlierWs[`A${i + 2}`] = { t: 'n', v, w: String(v) };
+	});
+	const outlierWorkbook = { SheetNames: ['Sheet1'], Sheets: { Sheet1: outlierWs } };
+	const outlierBuf: Buffer = XLSX.write(outlierWorkbook, { type: 'buffer', bookType: 'xlsx' });
+	xlsxOutlierFixtureBytes = toArrayBuffer(outlierBuf);
 });
 
 function baseDuplicationRequest(
@@ -82,6 +103,22 @@ function baseDuplicationRequest(
 		caseInsensitive: true,
 		trimWhitespace: true,
 		detail: 'compact',
+		pageSize: 'Letter',
+		generatedAtDisplay: '2024-01-01 12:00 UTC',
+		...overrides
+	};
+}
+
+function baseOutlierRequest(overrides: Partial<OutlierBuildRequest> = {}): OutlierBuildRequest {
+	return {
+		fileName: 'test.xlsx',
+		sourceType: 'excel',
+		fileBytes: xlsxOutlierFixtureBytes,
+		sheetName: 'Sheet1',
+		title: 'Test Outlier Report',
+		columns: ['Amount'],
+		sensitivity: 'standard',
+		detail: 'summary-and-detail',
 		pageSize: 'Letter',
 		generatedAtDisplay: '2024-01-01 12:00 UTC',
 		...overrides
@@ -231,3 +268,56 @@ describe('buildDuplicationReport — end to end (Excel source)', () => {
 		expect(text).toContain(result.sha256Full);
 	});
 });
+
+describe('buildOutlierReport — end to end (Excel source)', () => {
+	it('flags the clear high outlier (value 500, row 10) and reports its deviation', async () => {
+		const result = await buildOutlierReport(baseOutlierRequest(), fontBytesOverride);
+		expect(result.columnsAnalyzed).toBe(1);
+		expect(result.totalOutlierCount).toBe(1);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('Column outlier summary');
+		expect(text).toContain('Outlier detail');
+		expect(text).toContain('500');
+		expect(text).toMatch(/IQR above fence/);
+	});
+
+	it('finds no outliers and surfaces the "no outliers" warning when none are present', async () => {
+		const result = await buildOutlierReport(
+			baseOutlierRequest({ columns: [] }),
+			fontBytesOverride
+		);
+		expect(result.totalOutlierCount).toBe(0);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('No outliers were found');
+	});
+
+	it('"extreme" sensitivity (3x IQR) flags fewer or equal outliers than "standard" (1.5x)', async () => {
+		const standard = await buildOutlierReport(
+			baseOutlierRequest({ sensitivity: 'standard' }),
+			fontBytesOverride
+		);
+		const extreme = await buildOutlierReport(
+			baseOutlierRequest({ sensitivity: 'extreme' }),
+			fontBytesOverride
+		);
+		expect(extreme.totalOutlierCount).toBeLessThanOrEqual(standard.totalOutlierCount);
+	});
+
+	it('"summary" detail mode omits the Outlier detail table', async () => {
+		const result = await buildOutlierReport(
+			baseOutlierRequest({ detail: 'summary' }),
+			fontBytesOverride
+		);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('Column outlier summary');
+		expect(text).not.toContain('Outlier detail');
+	});
+
+	it('includes the full SHA-256 of the original bytes', async () => {
+		const result = await buildOutlierReport(baseOutlierRequest(), fontBytesOverride);
+		expect(result.sha256Full).toHaveLength(64);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain(result.sha256Full);
+	});
+});
+

@@ -3,10 +3,10 @@
 	 * GenerateReportModal.svelte — "Generate Report" popup.
 	 *
 	 * Step flow:
-	 *   'type'    — pick a report type. Only "Summary report" is wired up;
-	 *               "Batch documents" and "Data Review" are shown as visible,
-	 *               disabled "Coming soon" cards (req. #8 — keeps the scaffold
-	 *               ready for them without touching this step's structure).
+	 *   'type'    — pick a report type: Summary report, Column Visual
+	 *               Analysis, Your Cell Commentary Report (only when cell
+	 *               notes exist), Data Duplication Report, and Data Outlier
+	 *               Analysis (only when numeric columns exist).
 	 *   'options' — Summary report: sheet/group-by/aggregation/sort/detail/
 	 *               page-size controls.
 	 *   'generating' — spinner while report-worker.ts builds the PDF.
@@ -21,6 +21,7 @@
 		generateColumnVisualReport,
 		generateCellCommentaryReport,
 		generateDuplicationReport,
+		generateOutlierReport,
 		type GenerateReportResult,
 		type GenerateReportHandle,
 		type GenerateColumnVisualResult,
@@ -29,6 +30,8 @@
 		type GenerateCellCommentaryHandle,
 		type GenerateDuplicationResult,
 		type GenerateDuplicationHandle,
+		type GenerateOutlierResult,
+		type GenerateOutlierHandle,
 		type ReportProgress,
 		type ColumnVisualInput
 	} from '$lib/report/generate-report.js';
@@ -52,19 +55,21 @@
 		sheetsWithCellNotes
 	} from '$lib/report/cell-commentary-report.js';
 	import type { DuplicationDetail } from '$lib/report/duplication-report.js';
+	import type { OutlierSensitivity, OutlierReportDetail } from '$lib/report/outlier-report.js';
 
 	interface Props {
 		onclose: () => void;
 	}
 	let { onclose }: Props = $props();
 
-	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'duplication' | 'batch';
+	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'duplication' | 'outlier';
 	type Phase =
 		| 'type'
 		| 'options'
 		| 'column-visual-options'
 		| 'cell-commentary-options'
 		| 'duplication-options'
+		| 'outlier-options'
 		| 'generating'
 		| 'done'
 		| 'error';
@@ -211,6 +216,57 @@
 		return { groupCount, rowCount };
 	});
 
+	// ── Data Outlier Analysis state ──────────────────────────────────────
+	// Only numeric columns are selectable (checkboxes, at least one
+	// required). Sensitivity defaults to 'standard' (1.5x IQR, the classic
+	// Tukey fence — matches the Data Workbench dashboard's own "Show
+	// outliers" callout). Detail defaults to "summary-and-detail" so the
+	// user immediately sees which rows to look at, not just counts.
+	let outlierColumns = $state<Set<string>>(new Set());
+	let outlierSensitivity = $state<OutlierSensitivity>('standard');
+	let outlierDetail = $state<OutlierReportDetail>('summary-and-detail');
+
+	function toggleOutlierColumn(name: string) {
+		const next = new Set(outlierColumns);
+		if (next.has(name)) next.delete(name);
+		else next.add(name);
+		outlierColumns = next;
+	}
+
+	/** Live preview over the already-loaded display buffer — same
+	 *  instant-feedback pattern as duplicationPreview above. Mirrors
+	 *  findOutliers()'s IQR-fence math exactly (same simple-statistics
+	 *  quantile() call), just without the row-number/display bookkeeping
+	 *  the full worker-side build needs. */
+	const outlierPreview = $derived.by(() => {
+		const sheet = workbook?.sheets.find((s) => s.name === selectedSheetName);
+		const columns = [...outlierColumns];
+		if (!sheet || columns.length === 0) return { columnCount: 0, outlierCount: 0 };
+		const multiplier = outlierSensitivity === 'extreme' ? 3 : 1.5;
+		let columnCount = 0;
+		let outlierCount = 0;
+		for (const col of columns) {
+			const values: number[] = [];
+			for (const row of sheet.rows) {
+				const raw = row[col];
+				if (raw === null || raw === undefined || raw === '') continue;
+				const n = typeof raw === 'number' ? raw : Number(String(raw).replace(/[, $]/g, ''));
+				if (Number.isFinite(n)) values.push(n);
+			}
+			if (values.length === 0) continue;
+			const sorted = [...values].sort((a, b) => a - b);
+			const q1 = sorted[Math.floor((sorted.length - 1) * 0.25)];
+			const q3 = sorted[Math.floor((sorted.length - 1) * 0.75)];
+			const iqr = q3 - q1;
+			const lo = q1 - multiplier * iqr;
+			const hi = q3 + multiplier * iqr;
+			const flagged = values.filter((v) => v < lo || v > hi).length;
+			if (flagged > 0) columnCount++;
+			outlierCount += flagged;
+		}
+		return { columnCount, outlierCount };
+	});
+
 	// ── Options state ────────────────────────────────────────────────────
 	let groupByColumn = $state<string | null>(null);
 	let aggregations = $state<Record<string, AggregationChoice>>({});
@@ -294,6 +350,7 @@
 		| GenerateColumnVisualHandle
 		| GenerateCellCommentaryHandle
 		| GenerateDuplicationHandle
+		| GenerateOutlierHandle
 		| null = null;
 	let visualResult = $state<GenerateColumnVisualResult | null>(null);
 
@@ -514,6 +571,50 @@
 		}
 	}
 
+	let outlierResult = $state<GenerateOutlierResult | null>(null);
+
+	async function generateOutlier() {
+		const file = workspace.file;
+		if (!file || !selectedSheetName || outlierColumns.size === 0) return;
+
+		phase = 'generating';
+		progressStage = 'reading';
+		progressProcessed = 0;
+		progressTotal = 0;
+		try {
+			const handle = generateOutlierReport(
+				{
+					fileName: file.name,
+					sourceType: isExcel ? 'excel' : 'csv',
+					fileBytes: file.rawContent,
+					sheetName: selectedSheetName,
+					title: `${file.name} — Data Outlier Analysis`,
+					columns: [...outlierColumns],
+					sensitivity: outlierSensitivity,
+					detail: outlierDetail,
+					pageSize,
+					generatedAtDisplay: new Date().toLocaleString()
+				},
+				(progress) => {
+					progressStage = progress.stage;
+					progressProcessed = progress.processed;
+					progressTotal = progress.total;
+				}
+			);
+			activeHandle = handle;
+			outlierResult = await handle.promise;
+			activeHandle = null;
+			downloadPdf();
+			phase = 'done';
+		} catch (err) {
+			activeHandle = null;
+			if (phase === 'generating') {
+				error = err instanceof Error ? err.message : String(err);
+				phase = 'error';
+			}
+		}
+	}
+
 	function cancelGenerate() {
 		activeHandle?.cancel();
 		activeHandle = null;
@@ -525,7 +626,9 @@
 					? 'cell-commentary-options'
 					: reportType === 'duplication'
 						? 'duplication-options'
-						: 'options';
+						: reportType === 'outlier'
+							? 'outlier-options'
+							: 'options';
 	}
 
 	function downloadPdf() {
@@ -536,7 +639,9 @@
 					? cellCommentaryResult?.pdfBytes
 					: reportType === 'duplication'
 						? duplicationResult?.pdfBytes
-						: result?.pdfBytes;
+						: reportType === 'outlier'
+							? outlierResult?.pdfBytes
+							: result?.pdfBytes;
 		if (!bytes) return;
 		const suffix =
 			reportType === 'column-visual'
@@ -545,7 +650,9 @@
 					? 'cell-commentary-report'
 					: reportType === 'duplication'
 						? 'data-duplication-report'
-						: 'summary-report';
+						: reportType === 'outlier'
+							? 'data-outlier-analysis'
+							: 'summary-report';
 		const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
@@ -614,14 +721,6 @@
 				</div>
 			{/if}
 
-			<div class="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-slate-800 opacity-60 cursor-not-allowed">
-				<div class="flex items-center gap-2">
-					<span class="font-semibold text-sm text-gray-700 dark:text-gray-300">Batch documents</span>
-					<span class="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-200 text-gray-600 dark:bg-slate-800 dark:text-gray-400">Coming soon</span>
-				</div>
-				<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">One PDF per row or group — invoices, statements, pay stubs.</p>
-			</div>
-
 			<button
 				type="button"
 				onclick={() => { reportType = 'duplication'; phase = 'duplication-options'; }}
@@ -633,6 +732,27 @@
 					of each other.
 				</p>
 			</button>
+
+			{#if numericHeaders.length > 0}
+				<button
+					type="button"
+					onclick={() => { reportType = 'outlier'; phase = 'outlier-options'; }}
+					class="w-full text-left p-4 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+				>
+					<div class="font-semibold text-sm text-gray-900 dark:text-white">Data Outlier Analysis</div>
+					<p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+						Pick numeric columns and flag statistical outliers (IQR fence), with a
+						summary table and optional row-level detail.
+					</p>
+				</button>
+			{:else}
+				<div class="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-slate-800 opacity-60 cursor-not-allowed">
+					<div class="font-semibold text-sm text-gray-700 dark:text-gray-300">Data Outlier Analysis</div>
+					<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+						No numeric columns detected on this sheet.
+					</p>
+				</div>
+			{/if}
 		</div>
 	{:else if phase === 'column-visual-options'}
 		<div class="space-y-4">
@@ -841,6 +961,71 @@
 			</label>
 		</div>
 
+	{:else if phase === 'outlier-options'}
+		<div class="space-y-4">
+			{#if isExcel && workbook && workbook.sheets.length > 1}
+				<label class="block">
+					<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Sheet</span>
+					<select bind:value={selectedSheetName} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+						{#each workbook.sheets as s (s.name)}
+							<option value={s.name}>{s.name}</option>
+						{/each}
+					</select>
+				</label>
+			{/if}
+
+			<div>
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Analyze these columns</span>
+				<div class="mt-1 space-y-1 max-h-40 overflow-y-auto rounded-lg border border-gray-200 dark:border-slate-800 p-2">
+					{#each numericHeaders as h (h)}
+						<label class="flex items-center gap-2 text-xs text-gray-700 dark:text-gray-300">
+							<input
+								type="checkbox"
+								checked={outlierColumns.has(h)}
+								onchange={() => toggleOutlierColumn(h)}
+								class="rounded border-gray-300 dark:border-slate-700"
+							/>
+							<span class="truncate" title={h}>{h}</span>
+						</label>
+					{/each}
+				</div>
+				{#if outlierColumns.size === 0}
+					<p class="text-xs text-amber-600 dark:text-amber-400 mt-1">Select at least one numeric column.</p>
+				{/if}
+			</div>
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Sensitivity</span>
+				<select bind:value={outlierSensitivity} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="standard">Standard (1.5× IQR)</option>
+					<option value="extreme">Extreme only (3× IQR)</option>
+				</select>
+			</label>
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Report detail</span>
+				<select bind:value={outlierDetail} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="summary">Summary only (per-column counts)</option>
+					<option value="summary-and-detail">Summary + detail (every flagged row)</option>
+				</select>
+			</label>
+
+			{#if outlierColumns.size > 0}
+				<p class="text-sm text-gray-600 dark:text-gray-400">
+					{outlierPreview.outlierCount.toLocaleString()} outlier{outlierPreview.outlierCount === 1 ? '' : 's'}
+					found across {outlierPreview.columnCount.toLocaleString()} column{outlierPreview.columnCount === 1 ? '' : 's'}.
+				</p>
+			{/if}
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Page size</span>
+				<select bind:value={pageSize} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="Letter">Letter</option>
+					<option value="A4">A4</option>
+				</select>
+			</label>
+		</div>
+
 	{:else if phase === 'options'}
 		<div class="space-y-4">
 			{#if isExcel && workbook && workbook.sheets.length > 1}
@@ -977,7 +1162,9 @@
 							? generateCellCommentary
 							: reportType === 'duplication'
 								? generateDuplication
-								: generate
+								: reportType === 'outlier'
+									? generateOutlier
+									: generate
 				}
 				class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
 			>
@@ -994,7 +1181,13 @@
 					({duplicationResult.duplicateRowCount.toLocaleString()} row{duplicationResult.duplicateRowCount === 1 ? '' : 's'}).
 				</p>
 			{/if}
-			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && result.replacedCharacterCount > 0}
+			{#if outlierResult && reportType === 'outlier'}
+				<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">
+					{outlierResult.totalOutlierCount.toLocaleString()} outlier{outlierResult.totalOutlierCount === 1 ? '' : 's'}
+					found across {outlierResult.columnsAnalyzed.toLocaleString()} column{outlierResult.columnsAnalyzed === 1 ? '' : 's'}.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && reportType !== 'outlier' && result.replacedCharacterCount > 0}
 				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
 					{result.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were replaced
 					with "?" — likely a non-Latin script (e.g. Japanese, Arabic) this report doesn't yet support.
@@ -1018,7 +1211,13 @@
 					replaced with "?" — likely a non-Latin script this report doesn't yet support.
 				</p>
 			{/if}
-			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication'}
+			{#if outlierResult && reportType === 'outlier' && outlierResult.replacedCharacterCount > 0}
+				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
+					{outlierResult.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were
+					replaced with "?" — likely a non-Latin script this report doesn't yet support.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && reportType !== 'outlier'}
 				{#each result.warnings as w (w)}
 					<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">⚠ {w}</p>
 				{/each}
@@ -1061,6 +1260,19 @@
 				<button
 					onclick={generateDuplication}
 					disabled={duplicationKeyColumns.size === 0}
+					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					Generate
+				</button>
+			</div>
+		{:else if phase === 'outlier-options'}
+			<div class="flex justify-between gap-2">
+				<button onclick={() => (phase = 'type')} class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+					Back
+				</button>
+				<button
+					onclick={generateOutlier}
+					disabled={outlierColumns.size === 0}
 					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					Generate
