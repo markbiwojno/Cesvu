@@ -6,10 +6,13 @@ import {
 	buildReport,
 	buildDuplicationReport,
 	buildOutlierReport,
+	buildContractReport,
 	type ReportBuildRequest,
 	type DuplicationBuildRequest,
-	type OutlierBuildRequest
+	type OutlierBuildRequest,
+	type ContractBuildRequest
 } from './report-worker.js';
+import type { ContractProfile } from '$lib/lenses/contract/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 let fontBytesOverride: { regular: ArrayBuffer; bold: ArrayBuffer };
@@ -318,6 +321,131 @@ describe('buildOutlierReport — end to end (Excel source)', () => {
 		expect(result.sha256Full).toHaveLength(64);
 		const text = await extractAllText(result.pdfBytes);
 		expect(text).toContain(result.sha256Full);
+	});
+});
+
+function baseContractProfile(overrides: Partial<ContractProfile> = {}): ContractProfile {
+	return {
+		riskSummary: { high: 1, medium: 1, low: 0 },
+		clauses: [
+			{
+				id: 'c1',
+				number: 1,
+				label: 'Indemnification',
+				rawLabel: 'indemnification',
+				risk: 'high',
+				description: 'One party covers the other\'s losses.',
+				startOffset: 0,
+				endOffset: 100
+			},
+			{
+				id: 'c2',
+				number: 2,
+				label: 'Termination',
+				rawLabel: 'termination_convenience',
+				risk: 'medium',
+				description: 'Either party may end the agreement.',
+				startOffset: 100,
+				endOffset: 200
+			}
+		],
+		parties: [{ name: 'Acme Corp', kind: 'org', role: 'Company', source: 'auto-preamble' }],
+		dates: [{ label: 'Effective', value: 'Jan 1, 2024' }],
+		missingStandardClauses: ['Confidentiality'],
+		...overrides
+	};
+}
+
+function baseContractRequest(overrides: Partial<ContractBuildRequest> = {}): ContractBuildRequest {
+	return {
+		fileName: 'nda.pdf',
+		title: 'nda.pdf — Contract Risk Report',
+		profile: baseContractProfile(),
+		notes: [],
+		pageSize: 'Letter',
+		generatedAtDisplay: '2024-01-01 12:00 PM',
+		fileBytes: xlsxFixtureBytes,
+		...overrides
+	};
+}
+
+describe('buildContractReport — end to end (ContractProfile, no re-parse)', () => {
+	it('renders the Clauses, Parties, and Key Dates tables with risk-colored cells', async () => {
+		const result = await buildContractReport(baseContractRequest(), fontBytesOverride);
+		expect(result.clauseCount).toBe(2);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('Clauses');
+		expect(text).toContain('Indemnification');
+		expect(text).toContain('Termination');
+		expect(text).toContain('Parties');
+		expect(text).toContain('Acme Corp');
+		expect(text).toContain('Key Dates');
+		expect(text).toContain('Jan 1, 2024');
+	});
+
+	it('surfaces missing standard clauses as a warning', async () => {
+		const result = await buildContractReport(baseContractRequest(), fontBytesOverride);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('No confidentiality clause detected.');
+	});
+
+	it('omits the Parties/Key Dates sections when the profile has none', async () => {
+		const result = await buildContractReport(
+			baseContractRequest({ profile: baseContractProfile({ parties: [], dates: [] }) }),
+			fontBytesOverride
+		);
+		const text = await extractAllText(result.pdfBytes);
+		// "Parties: 0" still appears in the settings block (an accurate
+		// count), but the PARTIES TABLE itself (party name/type columns)
+		// should be absent — same for the Key Dates table.
+		expect(text).not.toContain('Organization');
+		expect(text).not.toContain('Individual');
+		expect(text).not.toContain('Key Dates');
+	});
+
+	it('includes the full SHA-256 of the original bytes', async () => {
+		const result = await buildContractReport(baseContractRequest(), fontBytesOverride);
+		expect(result.sha256Full).toHaveLength(64);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain(result.sha256Full);
+	});
+
+	it('renders a prose note inline, under the clause it is anchored inside', async () => {
+		const result = await buildContractReport(
+			baseContractRequest({
+				notes: [{ offset: 10, body: 'Push back on this indemnity scope.' }]
+			}),
+			fontBytesOverride
+		);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('Push back on this indemnity scope.');
+		expect(text).toContain('Note:');
+		// The note (offset 10, inside c1's [0,100) range) should appear AFTER
+		// "Indemnification" but BEFORE "Termination" — i.e. genuinely inline
+		// under its own clause, not collected into a separate table.
+		const noteIdx = text.indexOf('Push back on this indemnity scope.');
+		const indemnIdx = text.indexOf('Indemnification');
+		const terminationIdx = text.indexOf('Termination');
+		expect(indemnIdx).toBeGreaterThanOrEqual(0);
+		expect(noteIdx).toBeGreaterThan(indemnIdx);
+		expect(noteIdx).toBeLessThan(terminationIdx);
+	});
+
+	it('includes a note count in settings and warns about unmatched notes', async () => {
+		const result = await buildContractReport(
+			baseContractRequest({
+				notes: [
+					{ offset: 10, body: 'Matched note.' },
+					{ offset: 9999, body: 'Unmatched note (outside any clause range).' }
+				]
+			}),
+			fontBytesOverride
+		);
+		const text = await extractAllText(result.pdfBytes);
+		expect(text).toContain('Notes: 2');
+		expect(text).toContain('Matched note.');
+		expect(text).not.toContain('Unmatched note');
+		expect(text).toMatch(/1 note could not be matched/);
 	});
 });
 

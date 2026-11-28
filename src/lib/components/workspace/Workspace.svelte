@@ -613,11 +613,12 @@
 		<!-- Light/dark mode toggle. Persists to localStorage via mode-watcher. -->
 		<ThemeToggle />
 
-		<!-- Generate Report (Excel/CSV only). Opens a popup to build a
-		     downloadable PDF from the sheet's data — grouped summary tables,
-		     subtotals, and a grand total for now; batch/data-review report
-		     types are scaffolded in the same modal for later. -->
-		{#if isTabularFile}
+		<!-- Generate Report (Excel/CSV, plus the contract lens). Opens a
+		     popup to build a downloadable PDF — grouped summary tables for
+		     spreadsheets, or a Contract Risk Report (clauses, risk levels,
+		     parties, dates) for contracts. Same modal, same button, per
+		     report type. -->
+		{#if isTabularFile || isContract}
 			<button
 				type="button"
 				onclick={() => (showGenerateReport = true)}

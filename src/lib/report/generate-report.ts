@@ -12,15 +12,18 @@ import type {
 	ColumnVisualBuildRequest,
 	CellCommentaryBuildRequest,
 	DuplicationBuildRequest,
-	OutlierBuildRequest
+	OutlierBuildRequest,
+	ContractBuildRequest
 } from './report-worker.js';
 export type { ReportProgress } from './report-worker.js';
 export type {
 	ColumnVisualBuildRequest,
 	CellCommentaryBuildRequest,
 	DuplicationBuildRequest,
-	OutlierBuildRequest
+	OutlierBuildRequest,
+	ContractBuildRequest
 } from './report-worker.js';
+export type { ContractNoteInput } from './contract-report.js';
 export type { ColumnVisualInput, ReportTableSection } from './pdf-writer.js';
 
 export interface GenerateReportResult {
@@ -445,6 +448,89 @@ export function generateOutlierReport(
 		const copy = request.fileBytes.slice(0);
 		worker.postMessage(
 			{ type: 'build-outlier', id, request: { ...request, fileBytes: copy } },
+			[copy]
+		);
+	});
+
+	return {
+		promise,
+		cancel: () => {
+			cancelled = true;
+			cleanup();
+		}
+	};
+}
+
+export interface GenerateContractResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	clauseCount: number;
+	sha256Full: string;
+}
+
+export interface GenerateContractHandle {
+	promise: Promise<GenerateContractResult>;
+	cancel: () => void;
+}
+
+/**
+ * Run the "Contract Risk Report" build in a Web Worker. The ContractProfile
+ * is already fully computed (no DOM, no model call needed) — the worker
+ * only builds the table sections + lays out, draws, and saves the PDF, same
+ * `{ promise, cancel }` + progress-callback shape as the other report types.
+ */
+export function generateContractReport(
+	request: ContractBuildRequest,
+	onProgress?: (progress: ReportProgress) => void
+): GenerateContractHandle {
+	let worker: Worker;
+	try {
+		worker = new Worker(new URL('./report-worker.ts', import.meta.url), { type: 'module' });
+	} catch (err) {
+		return {
+			promise: Promise.reject(
+				err instanceof Error ? err : new Error('Failed to start the report worker')
+			),
+			cancel: () => {}
+		};
+	}
+
+	const id = newId('report');
+	let cancelled = false;
+	const cleanup = () => worker.terminate();
+
+	const promise = new Promise<GenerateContractResult>((resolve, reject) => {
+		worker.onmessage = (event: MessageEvent) => {
+			const msg = event.data;
+			if (!msg || msg.id !== id || cancelled) return;
+			switch (msg.type) {
+				case 'progress':
+					onProgress?.({ stage: msg.stage, processed: msg.processed, total: msg.total });
+					break;
+				case 'done':
+					cleanup();
+					resolve({
+						pdfBytes: msg.pdfBytes,
+						replacedCharacterCount: msg.replacedCharacterCount,
+						clauseCount: msg.clauseCount,
+						sha256Full: msg.sha256Full
+					});
+					break;
+				case 'error':
+					cleanup();
+					reject(new Error(msg.message ?? 'Report generation failed'));
+					break;
+			}
+		};
+		worker.onerror = (e) => {
+			if (cancelled) return;
+			cleanup();
+			reject(new Error(e.message ?? 'Report worker crashed'));
+		};
+
+		const copy = request.fileBytes.slice(0);
+		worker.postMessage(
+			{ type: 'build-contract', id, request: { ...request, fileBytes: copy } },
 			[copy]
 		);
 	});

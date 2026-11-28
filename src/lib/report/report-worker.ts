@@ -34,6 +34,15 @@ import {
 	type ReportTableSection,
 	type ColumnVisualInput
 } from './pdf-writer.js';
+import {
+	buildContractSettingsLines,
+	buildContractKpiLines,
+	buildContractWarnings,
+	buildContractSections,
+	matchNotesToClauses,
+	type ContractNoteInput
+} from './contract-report.js';
+import type { ContractProfile } from '$lib/lenses/contract/types.js';
 
 // Fonts are bundled static assets — resolved to their final hashed URL at
 // build time via Vite's `?url` import, then fetched (works identically in
@@ -178,6 +187,33 @@ export interface OutlierBuildResult {
 	replacedCharacterCount: number;
 	columnsAnalyzed: number;
 	totalOutlierCount: number;
+	sha256Full: string;
+}
+
+/**
+ * Request for the "Contract Risk Report". Unlike the spreadsheet reports,
+ * there is no file to re-parse — `profile` is the already-computed
+ * {@link ContractProfile} (same object ContractSidebar.svelte renders
+ * live), and `fileBytes` is used only for the footer's SHA-256 hash, same
+ * role it plays in ColumnVisualBuildRequest/CellCommentaryBuildRequest.
+ */
+export interface ContractBuildRequest {
+	fileName: string;
+	title: string;
+	profile: ContractProfile;
+	/** Prose notes the user left on this contract — rendered inline under
+	 *  the clause each one is anchored to (see contract-report.ts). */
+	notes: ContractNoteInput[];
+	pageSize: 'Letter' | 'A4';
+	generatedAtDisplay: string;
+	/** Original file bytes — used only for the SHA-256 footer hash. */
+	fileBytes: ArrayBuffer;
+}
+
+export interface ContractBuildResult {
+	pdfBytes: Uint8Array;
+	replacedCharacterCount: number;
+	clauseCount: number;
 	sha256Full: string;
 }
 
@@ -720,6 +756,68 @@ export async function buildOutlierReport(
 	};
 }
 
+/**
+ * Build pipeline for the "Contract Risk Report". The profile is already
+ * fully computed (no re-parse, no classifier calls) — this function just
+ * hashes the file, builds the table sections via contract-report.ts's pure
+ * helpers, and draws them with the same table renderer the other reports
+ * use (including the per-cell risk coloring on the Clauses table).
+ */
+export async function buildContractReport(
+	request: ContractBuildRequest,
+	fontBytesOverride?: { regular: ArrayBuffer; bold: ArrayBuffer },
+	onProgress?: (progress: ReportProgress) => void
+): Promise<ContractBuildResult> {
+	onProgress?.({ stage: 'reading', processed: 0, total: 0 });
+	const sha256Full = await sha256Hex(request.fileBytes);
+	onProgress?.({ stage: 'reading', processed: 1, total: 1 });
+
+	const { regular: regularBytes, bold: boldBytes } =
+		fontBytesOverride ??
+		(await (async () => {
+			const [regular, bold] = await Promise.all([
+				fetchFontBytes(notoRegularUrl),
+				fetchFontBytes(notoBoldUrl)
+			]);
+			return { regular, bold };
+		})());
+
+	const profile = request.profile;
+	const notes = request.notes ?? [];
+	const sections = buildContractSections(profile, notes);
+	const { unmatched } = matchNotesToClauses(profile.clauses, notes);
+
+	const pdfInput: ReportPdfInput = {
+		title: request.title,
+		fileName: request.fileName,
+		generatedAtDisplay: request.generatedAtDisplay,
+		sha256Full,
+		settingsLines: buildContractSettingsLines({
+			clauseCount: profile.clauses.length,
+			partyCount: profile.parties.length,
+			dateCount: profile.dates.length,
+			noteCount: notes.length,
+			pageSize: request.pageSize,
+			sha256Full
+		}),
+		kpiLines: buildContractKpiLines(profile),
+		warnings: buildContractWarnings(profile, unmatched.length),
+		pageSize: request.pageSize,
+		sections
+	};
+
+	const { bytes, replacedCharacterCount } = await buildReportPdf(
+		pdfInput,
+		{ regular: regularBytes, bold: boldBytes },
+		(drawn, total) => {
+			if (drawn >= total) onProgress?.({ stage: 'saving', processed: 0, total: 0 });
+			else onProgress?.({ stage: 'drawing', processed: drawn, total });
+		}
+	);
+
+	return { pdfBytes: bytes, replacedCharacterCount, clauseCount: profile.clauses.length, sha256Full };
+}
+
 // ============================================================
 // Worker protocol — only wired up when actually running as a Worker.
 // Guarded so this module can also be imported directly in tests/Node.
@@ -734,8 +832,28 @@ if (typeof self !== 'undefined' && typeof (self as unknown as { postMessage?: un
 				| ColumnVisualBuildRequest
 				| CellCommentaryBuildRequest
 				| DuplicationBuildRequest
-				| OutlierBuildRequest;
+				| OutlierBuildRequest
+				| ContractBuildRequest;
 		};
+		if (msg?.type === 'build-contract' && msg.request) {
+			buildContractReport(msg.request as ContractBuildRequest, undefined, (progress) => {
+				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });
+			})
+				.then((result) => {
+					(self as unknown as Worker).postMessage(
+						{ type: 'done', id: msg.id, ...result },
+						[result.pdfBytes.buffer]
+					);
+				})
+				.catch((err) => {
+					(self as unknown as Worker).postMessage({
+						type: 'error',
+						id: msg.id,
+						message: err instanceof Error ? err.message : String(err)
+					});
+				});
+			return;
+		}
 		if (msg?.type === 'build-column-visual' && msg.request) {
 			buildColumnVisualReport(msg.request as ColumnVisualBuildRequest, undefined, (progress) => {
 				(self as unknown as Worker).postMessage({ type: 'progress', id: msg.id, ...progress });

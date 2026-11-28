@@ -32,6 +32,20 @@ export interface Clause {
 	title: string;
 	/** Full clause text (title line + body). */
 	text: string;
+	/**
+	 * Character offset range into the ORIGINAL (pre-normalization) document
+	 * text this clause spans — used to match prose notes (which are anchored
+	 * by character offset) to the clause they fall inside, for the Contract
+	 * Risk Report's inline note rendering. Optional and best-effort: the
+	 * automatic tiered splitters (markdown/numbered/caps/paragraph) run over
+	 * a NORMALIZED copy of the text (see normalizeForClauses), whose offsets
+	 * don't line up with the original — those paths leave this undefined
+	 * rather than report a wrong range. Only `clausesFromOffsets()` (the
+	 * manual splitter, which always operates on the original text the user
+	 * sees) populates it exactly.
+	 */
+	startOffset?: number;
+	endOffset?: number;
 }
 
 
@@ -352,11 +366,22 @@ function cleanTitle(raw: string): string {
  * The `id` is a placeholder here ('') — `splitClauses` stamps the final,
  * guaranteed-unique id once the winning strategy's full list is known.
  */
-function makeClause(number: number, title: string, text: string): Clause | null {
+function makeClause(
+	number: number,
+	title: string,
+	text: string,
+	offsets?: { startOffset: number; endOffset: number }
+): Clause | null {
 	// Strip parser artifacts (markdown/HTML/escapes) before storing/classifying.
 	const body = cleanClauseText(text);
 	if (!body) return null;
-	return { id: '', number, title: cleanClauseText(title) || `Clause ${number}`, text: body };
+	return {
+		id: '',
+		number,
+		title: cleanClauseText(title) || `Clause ${number}`,
+		text: body,
+		...offsets
+	};
 }
 
 /**
@@ -713,7 +738,9 @@ export function clausesFromOffsets(text: string, splits: number[]): Clause[] {
 	const clauses: Clause[] = [];
 	let idx = 0;
 	for (let i = 0; i < cuts.length - 1; i++) {
-		const seg = text.slice(cuts[i], cuts[i + 1]).trim();
+		const rawStart = cuts[i];
+		const rawEnd = cuts[i + 1];
+		const seg = text.slice(rawStart, rawEnd).trim();
 		if (!seg) continue;
 		// A non-empty leading segment (before the first user split) is the preamble.
 		const isPreamble = i === 0 && bounds.length > 0;
@@ -724,7 +751,13 @@ export function clausesFromOffsets(text: string, splits: number[]): Clause[] {
 			: firstLine.length > 0 && firstLine.length <= 80
 				? firstLine
 				: `Clause ${number}`;
-		const clause = makeClause(number, title, seg);
+		// Offsets into the ORIGINAL text, accounting for leading/trailing
+		// whitespace trimmed off `seg` (cuts[] are raw segment boundaries,
+		// not the trimmed content's own start/end).
+		const leadingWs = text.slice(rawStart, rawEnd).length - text.slice(rawStart, rawEnd).trimStart().length;
+		const startOffset = rawStart + leadingWs;
+		const endOffset = startOffset + seg.length;
+		const clause = makeClause(number, title, seg, { startOffset, endOffset });
 		if (clause) clauses.push(clause);
 	}
 	return assignIds(clauses);

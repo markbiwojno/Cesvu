@@ -2049,11 +2049,16 @@
 
 		// Map highlighted spans → Clause[] for the shared profile builder. Reuse
 		// the store's stable id so downstream scroll-to-clause resolves correctly.
+		// startOffset/endOffset carry through from the live highlight span —
+		// this is what lets the Contract Risk Report match a prose note's
+		// character offset to the clause it falls inside.
 		const clauses: Clause[] = marks.map((m, i) => ({
 			id: m.id,
 			number: i + 1,
 			title: m.heading ?? `Clause ${i + 1}`,
-			text: m.text
+			text: m.text,
+			startOffset: m.startOffset,
+			endOffset: m.endOffset
 		}));
 
 		// Persist the highlight boundaries (start offsets) through the manual

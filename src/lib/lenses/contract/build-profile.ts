@@ -109,7 +109,9 @@ export async function buildProfileFromClauses(
 					risk: cls.risk,
 					description: cls.description,
 					score: cls.score,
-					text: c.text
+					text: c.text,
+					startOffset: c.startOffset,
+					endOffset: c.endOffset
 				};
 			} catch {
 				// Degrade gracefully: keep the clause, neutral metadata.
@@ -120,7 +122,9 @@ export async function buildProfileFromClauses(
 					rawLabel: 'unclassified',
 					risk: 'low',
 					description: 'Could not classify this clause.',
-					text: c.text
+					text: c.text,
+					startOffset: c.startOffset,
+					endOffset: c.endOffset
 				};
 			}
 

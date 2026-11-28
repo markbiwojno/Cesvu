@@ -36,6 +36,15 @@ export interface ClauseInstance {
 	 * prompt) can quote the actual wording. Kept full here; consumers truncate.
 	 */
 	text?: string;
+	/**
+	 * Character offset range into the document text this clause spans.
+	 * Optional/best-effort — see the matching field on clause-splitter.ts's
+	 * `Clause` type for why it isn't always available. Used by the Contract
+	 * Risk Report to render prose notes inline under the clause they fall
+	 * inside; absent entirely means that matching is skipped for this clause.
+	 */
+	startOffset?: number;
+	endOffset?: number;
 }
 
 

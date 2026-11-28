@@ -46,7 +46,7 @@ const MAX_COL_WIDTH = 220;
 
 export type ReportLine =
 	| { kind: 'group-header'; label: string }
-	| { kind: 'data'; cells: string[] }
+	| { kind: 'data'; cells: string[]; cellColors?: (string | null)[] }
 	| { kind: 'subtotal'; cells: string[] }
 	| { kind: 'grand-total'; cells: string[] };
 
@@ -131,7 +131,9 @@ function sanitizeInput(
 			lines: section.lines.map((line) =>
 				line.kind === 'group-header'
 					? { kind: 'group-header' as const, label: s(line.label) }
-					: { kind: line.kind, cells: sArr(line.cells) }
+					: line.kind === 'data'
+						? { kind: 'data' as const, cells: sArr(line.cells), cellColors: line.cellColors }
+						: { kind: line.kind, cells: sArr(line.cells) }
 			)
 		}))
 	};
@@ -159,6 +161,8 @@ interface RowDraw {
 	bold: boolean;
 	/** Thin top rule — used above subtotal/grand-total rows. */
 	ruleAbove: boolean;
+	/** Per-column text color override (e.g. risk-tinted cells). Null/absent = default. */
+	cellColors?: (string | null)[];
 }
 
 /** Build the per-column wrapped-line representation for one ReportLine. */
@@ -168,13 +172,14 @@ function layoutRow(
 	font: PDFFont,
 	boldFont: PDFFont,
 	bold: boolean,
-	ruleAbove: boolean
+	ruleAbove: boolean,
+	cellColors?: (string | null)[]
 ): RowDraw {
 	const useFont = bold ? boldFont : font;
 	const cellLines = cells.map((text, i) =>
 		wrapText(text, useFont, BODY_SIZE, colWidths[i] - CELL_PADDING * 2)
 	);
-	return { cellLines, bold, ruleAbove };
+	return { cellLines, bold, ruleAbove, cellColors };
 }
 
 function rowHeight(row: RowDraw): number {
@@ -258,6 +263,18 @@ function drawColumnHeader(
 	return headerBottom - 8;
 }
 
+/**
+ * Parse a '#rrggbb' hex string into a pdf-lib rgb() color. Returns null (so
+ * the caller falls back to the row's default color) for anything that
+ * isn't a clean 6-digit hex string — never throws on malformed input.
+ */
+function parseHexColor(hex: string): ReturnType<typeof rgb> | null {
+	const m = /^#?([0-9a-fA-F]{6})$/.exec(hex);
+	if (!m) return null;
+	const n = parseInt(m[1], 16);
+	return rgb(((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255);
+}
+
 function drawRow(
 	page: PDFPage,
 	row: RowDraw,
@@ -279,9 +296,10 @@ function drawRow(
 	let x = left;
 	const useFont = row.bold ? boldFont : font;
 	for (let i = 0; i < row.cellLines.length; i++) {
+		const override = row.cellColors?.[i] ? parseHexColor(row.cellColors[i]!) : null;
 		let ly = y - CELL_PADDING - BODY_SIZE;
 		for (const line of row.cellLines[i]) {
-			drawTextLine(page, line, x + CELL_PADDING, ly, BODY_SIZE, useFont);
+			drawTextLine(page, line, x + CELL_PADDING, ly, BODY_SIZE, useFont, override ?? undefined);
 			ly -= BODY_SIZE + LINE_GAP;
 		}
 		x += colWidths[i] ?? 0;
@@ -414,7 +432,8 @@ export async function buildReportPdf(
 			const ruleAbove = bold_;
 			const cells = line.kind === 'group-header' ? [line.label] : line.cells;
 			const widths = line.kind === 'group-header' ? [contentWidth] : colWidths;
-			const row = layoutRow(cells, widths, regular, bold, bold_ || line.kind === 'group-header', ruleAbove);
+			const cellColors = line.kind === 'data' ? line.cellColors : undefined;
+			const row = layoutRow(cells, widths, regular, bold, bold_ || line.kind === 'group-header', ruleAbove, cellColors);
 			const h = rowHeight(row);
 
 			if (!cursor.hasRoom(h)) {

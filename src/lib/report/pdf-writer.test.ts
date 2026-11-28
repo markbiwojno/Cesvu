@@ -126,6 +126,32 @@ describe('buildReportPdf — basic structure', () => {
 	});
 });
 
+describe('buildReportPdf — per-cell colors (cellColors)', () => {
+	it('renders normally when a data line specifies per-cell colors', async () => {
+		const section = baseSection({
+			lines: [
+				{ kind: 'data', cells: ['East', 'High'], cellColors: [null, '#dc2626'] },
+				{ kind: 'data', cells: ['West', 'Low'], cellColors: [null, '#059669'] }
+			]
+		});
+		const { bytes } = await buildReportPdf(baseInput({ sections: [section] }), fontBytes);
+		expect(bytes.slice(0, 5)).toEqual(new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x2d]));
+		const pages = await extractPageTexts(bytes);
+		const all = pages.join(' ');
+		expect(all).toContain('High');
+		expect(all).toContain('Low');
+	});
+
+	it('falls back to the default color instead of throwing on a malformed hex string', async () => {
+		const section = baseSection({
+			lines: [{ kind: 'data', cells: ['East', '100.00'], cellColors: [null, 'not-a-color'] }]
+		});
+		const { bytes } = await buildReportPdf(baseInput({ sections: [section] }), fontBytes);
+		const pages = await extractPageTexts(bytes);
+		expect(pages.join(' ')).toContain('100.00');
+	});
+});
+
 describe('buildReportPdf — multiple sections (group summary + detail)', () => {
 	it('renders a group-summary table BEFORE the detail table, each with its own repeating header', async () => {
 		const summarySection = baseSection({

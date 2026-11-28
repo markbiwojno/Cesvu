@@ -22,6 +22,7 @@
 		generateCellCommentaryReport,
 		generateDuplicationReport,
 		generateOutlierReport,
+		generateContractReport,
 		type GenerateReportResult,
 		type GenerateReportHandle,
 		type GenerateColumnVisualResult,
@@ -32,6 +33,9 @@
 		type GenerateDuplicationHandle,
 		type GenerateOutlierResult,
 		type GenerateOutlierHandle,
+		type GenerateContractResult,
+		type GenerateContractHandle,
+		type ContractNoteInput,
 		type ReportProgress,
 		type ColumnVisualInput
 	} from '$lib/report/generate-report.js';
@@ -62,7 +66,7 @@
 	}
 	let { onclose }: Props = $props();
 
-	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'duplication' | 'outlier';
+	type ReportType = 'summary' | 'column-visual' | 'cell-commentary' | 'duplication' | 'outlier' | 'contract';
 	type Phase =
 		| 'type'
 		| 'options'
@@ -70,6 +74,7 @@
 		| 'cell-commentary-options'
 		| 'duplication-options'
 		| 'outlier-options'
+		| 'contract-options'
 		| 'generating'
 		| 'done'
 		| 'error';
@@ -96,6 +101,13 @@
 	const numericHeaders = $derived(
 		(activeSheetProfile?.columns ?? []).filter((c) => c.type === 'numeric').map((c) => c.name)
 	);
+
+	// ── Contract Risk Report availability ────────────────────────────────
+	// Only offered in the contract lens, and only once a profile has been
+	// built (mirrors the "only show when relevant" pattern used for the
+	// Cell Commentary / Outlier cards above).
+	const isContractLens = $derived(workspace.effectiveLens === 'contract');
+	const contractProfile = $derived(workspace.contractProfile);
 
 	// ── Column Visual Analysis state ─────────────────────────────────────
 	// Any column can be added fresh (not tied to the dashboard's "loaded"
@@ -351,6 +363,7 @@
 		| GenerateCellCommentaryHandle
 		| GenerateDuplicationHandle
 		| GenerateOutlierHandle
+		| GenerateContractHandle
 		| null = null;
 	let visualResult = $state<GenerateColumnVisualResult | null>(null);
 
@@ -615,6 +628,53 @@
 		}
 	}
 
+	let contractResult = $state<GenerateContractResult | null>(null);
+
+	async function generateContract() {
+		const file = workspace.file;
+		if (!file || !contractProfile) return;
+
+		phase = 'generating';
+		progressStage = 'reading';
+		progressProcessed = 0;
+		progressTotal = 0;
+		try {
+			// Prose notes only (cell notes belong to the spreadsheet lenses) —
+			// mapped down to just { offset, body }, which is all
+			// contract-report.ts's note-to-clause matcher needs.
+			const notes: ContractNoteInput[] = notesStore.notes
+				.filter((n) => n.anchor.kind === 'prose')
+				.map((n) => ({ offset: (n.anchor as { offset: number }).offset, body: n.body }));
+			const handle = generateContractReport(
+				{
+					fileName: file.name,
+					title: `${file.name} — Contract Risk Report`,
+					profile: contractProfile,
+					notes,
+					pageSize,
+					generatedAtDisplay: new Date().toLocaleString(),
+					fileBytes: file.rawContent
+				},
+				(progress) => {
+					progressStage = progress.stage;
+					progressProcessed = progress.processed;
+					progressTotal = progress.total;
+				}
+			);
+			activeHandle = handle;
+			contractResult = await handle.promise;
+			activeHandle = null;
+			downloadPdf();
+			phase = 'done';
+		} catch (err) {
+			activeHandle = null;
+			if (phase === 'generating') {
+				error = err instanceof Error ? err.message : String(err);
+				phase = 'error';
+			}
+		}
+	}
+
 	function cancelGenerate() {
 		activeHandle?.cancel();
 		activeHandle = null;
@@ -628,7 +688,9 @@
 						? 'duplication-options'
 						: reportType === 'outlier'
 							? 'outlier-options'
-							: 'options';
+							: reportType === 'contract'
+								? 'contract-options'
+								: 'options';
 	}
 
 	function downloadPdf() {
@@ -641,7 +703,9 @@
 						? duplicationResult?.pdfBytes
 						: reportType === 'outlier'
 							? outlierResult?.pdfBytes
-							: result?.pdfBytes;
+							: reportType === 'contract'
+								? contractResult?.pdfBytes
+								: result?.pdfBytes;
 		if (!bytes) return;
 		const suffix =
 			reportType === 'column-visual'
@@ -652,7 +716,9 @@
 						? 'data-duplication-report'
 						: reportType === 'outlier'
 							? 'data-outlier-analysis'
-							: 'summary-report';
+							: reportType === 'contract'
+								? 'contract-risk-report'
+								: 'summary-report';
 		const blob = new Blob([bytes as BlobPart], { type: 'application/pdf' });
 		const url = URL.createObjectURL(blob);
 		const a = document.createElement('a');
@@ -674,6 +740,7 @@
 		<div class="space-y-3">
 			<p class="text-sm text-gray-600 dark:text-gray-400">Choose what kind of report to generate.</p>
 
+			{#if !isContractLens}
 			<button
 				type="button"
 				onclick={() => { reportType = 'column-visual'; phase = 'column-visual-options'; }}
@@ -752,6 +819,30 @@
 						No numeric columns detected on this sheet.
 					</p>
 				</div>
+			{/if}
+			{/if}
+
+			{#if isContractLens}
+				{#if contractProfile}
+					<button
+						type="button"
+						onclick={() => { reportType = 'contract'; phase = 'contract-options'; }}
+						class="w-full text-left p-4 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-50 dark:bg-blue-950/30 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors"
+					>
+						<div class="font-semibold text-sm text-gray-900 dark:text-white">Contract Risk Report</div>
+						<p class="text-xs text-gray-600 dark:text-gray-400 mt-1">
+							Risk summary, every clause with its risk level, parties, key dates, and any
+							missing standard clauses — in one shareable PDF.
+						</p>
+					</button>
+				{:else}
+					<div class="w-full text-left p-4 rounded-xl border border-gray-200 dark:border-slate-800 opacity-60 cursor-not-allowed">
+						<div class="font-semibold text-sm text-gray-700 dark:text-gray-300">Contract Risk Report</div>
+						<p class="text-xs text-gray-500 dark:text-gray-500 mt-1">
+							Finish marking clauses to unlock this report.
+						</p>
+					</div>
+				{/if}
 			{/if}
 		</div>
 	{:else if phase === 'column-visual-options'}
@@ -1026,6 +1117,29 @@
 			</label>
 		</div>
 
+	{:else if phase === 'contract-options'}
+		<div class="space-y-4">
+			{#if contractProfile}
+				<p class="text-sm text-gray-600 dark:text-gray-400">
+					{contractProfile.clauses.length.toLocaleString()} clause{contractProfile.clauses.length === 1 ? '' : 's'},
+					{contractProfile.parties.length.toLocaleString()} part{contractProfile.parties.length === 1 ? 'y' : 'ies'},
+					{contractProfile.dates.length.toLocaleString()} date{contractProfile.dates.length === 1 ? '' : 's'}.
+				</p>
+				<p class="text-sm text-gray-600 dark:text-gray-400">
+					<span class="text-red-600 dark:text-red-400 font-medium">{contractProfile.riskSummary.high}</span> high ·
+					<span class="text-amber-600 dark:text-amber-400 font-medium">{contractProfile.riskSummary.medium}</span> medium ·
+					<span class="text-emerald-600 dark:text-emerald-400 font-medium">{contractProfile.riskSummary.low}</span> low risk.
+				</p>
+			{/if}
+
+			<label class="block">
+				<span class="text-xs font-medium text-gray-700 dark:text-gray-300">Page size</span>
+				<select bind:value={pageSize} class="mt-1 w-full rounded-lg border border-gray-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-sm px-2 py-1.5">
+					<option value="Letter">Letter</option>
+					<option value="A4">A4</option>
+				</select>
+			</label>
+		</div>
 	{:else if phase === 'options'}
 		<div class="space-y-4">
 			{#if isExcel && workbook && workbook.sheets.length > 1}
@@ -1164,7 +1278,9 @@
 								? generateDuplication
 								: reportType === 'outlier'
 									? generateOutlier
-									: generate
+									: reportType === 'contract'
+										? generateContract
+										: generate
 				}
 				class="rounded-lg bg-gray-100 px-3 py-1.5 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-200 dark:bg-slate-800 dark:text-gray-200 dark:hover:bg-slate-700"
 			>
@@ -1187,7 +1303,12 @@
 					found across {outlierResult.columnsAnalyzed.toLocaleString()} column{outlierResult.columnsAnalyzed === 1 ? '' : 's'}.
 				</p>
 			{/if}
-			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && reportType !== 'outlier' && result.replacedCharacterCount > 0}
+			{#if contractResult && reportType === 'contract'}
+				<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">
+					{contractResult.clauseCount.toLocaleString()} clause{contractResult.clauseCount === 1 ? '' : 's'} included.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && reportType !== 'outlier' && reportType !== 'contract' && result.replacedCharacterCount > 0}
 				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
 					{result.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were replaced
 					with "?" — likely a non-Latin script (e.g. Japanese, Arabic) this report doesn't yet support.
@@ -1217,7 +1338,13 @@
 					replaced with "?" — likely a non-Latin script this report doesn't yet support.
 				</p>
 			{/if}
-			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && reportType !== 'outlier'}
+			{#if contractResult && reportType === 'contract' && contractResult.replacedCharacterCount > 0}
+				<p class="text-xs text-amber-600 dark:text-amber-400 max-w-sm">
+					{contractResult.replacedCharacterCount.toLocaleString()} character(s) could not be displayed and were
+					replaced with "?" — likely a non-Latin script this report doesn't yet support.
+				</p>
+			{/if}
+			{#if result && reportType !== 'column-visual' && reportType !== 'cell-commentary' && reportType !== 'duplication' && reportType !== 'outlier' && reportType !== 'contract'}
 				{#each result.warnings as w (w)}
 					<p class="text-xs text-gray-500 dark:text-gray-400 max-w-sm">⚠ {w}</p>
 				{/each}
@@ -1273,6 +1400,19 @@
 				<button
 					onclick={generateOutlier}
 					disabled={outlierColumns.size === 0}
+					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
+				>
+					Generate
+				</button>
+			</div>
+		{:else if phase === 'contract-options'}
+			<div class="flex justify-between gap-2">
+				<button onclick={() => (phase = 'type')} class="rounded-lg px-3 py-1.5 text-xs font-medium text-gray-500 transition-colors hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">
+					Back
+				</button>
+				<button
+					onclick={generateContract}
+					disabled={!contractProfile}
 					class="rounded-lg bg-green-600 px-4 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-green-500 disabled:opacity-50 disabled:cursor-not-allowed"
 				>
 					Generate
